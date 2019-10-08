@@ -1,7 +1,7 @@
 # cron
 Runner for simple directory-based "modules", suitable for crontab, that tracks runs in git
 
-It's not necessarily a good idea to use this instead of e.g. Docker containers; the main thing it provides is a particular way of storing/tracking runs (and changes between runs) in `git`.
+It's not necessarily a good idea to use this instead of e.g. Docker containers; the main thing it provides is a particular way of storing/tracking runs (and changes between runs) in `git`. It's also much lighter-weight than Docker (though more brittle as a result).
 
 ## "Modules"
 A "module" is a git repository containing a `run.sh` script that is designed to be run regularly / on an interval (e.g. in a user's `crontab`).
