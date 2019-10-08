@@ -4,24 +4,13 @@ from datetime import datetime as dt
 from fcntl import flock, LOCK_EX, LOCK_NB
 from pytz import utc
 from subprocess import check_call, CalledProcessError
-from sys import executable as python, stderr
+from sys import stderr
 from urllib.parse import urlparse
 
 from cd import cd
 from conf import *
 from git import git_sha, ensure_git_ignored
 from run import run, success
-
-
-# def run_module(url, dir, runs_url=None):
-#     cmd = [ python, __file__, url, dir ]
-#     if runs_url:
-#         cmd.append(runs_url)
-#
-#     out_path = Path(dir) / RUNNER_OUT_PATH
-#     err_path = Path(dir) / RUNNER_ERR_PATH
-#     with out_path.open('w') as out, err_path.open('r') as err:
-#         check_call(cmd, stdout=out, stderr=err)
 
 
 def clone_and_run_module(url, dir, runs_url=None):
@@ -70,56 +59,55 @@ def clone_and_run_module(url, dir, runs_url=None):
         run_sha = git_sha()
         print('Commit SHA: %s' % run_sha)
 
-    if not scheme:
-        # Module is a local directory (that is also a git repo)
-        if not runs_url:
-            # Log runs of this module in RUNS_DIR ('runs/') by default
-            runs_url = Path(url) / RUNS_DIR
-            if not runs_url.exists():
-                # Initialize fresh runs/ dir from current state of repo
-                run([ 'git', 'clone', url, runs_url ])
-
-                # git-ignore runs/ dir/repo in containing repo
-                with cd(url):
-                    ensure_git_ignored(RUNS_DIR)
-
-        with cd(runs_url):
-            lock_file = Path(LOCK_FILE_NAME)
-
-            if not lock_file.exists():
-                lock_file.touch()
-
-            with lock_file.open('r') as lock:
-                try:
-                    flock(lock, LOCK_EX | LOCK_NB)
-                except BlockingIOError as e:
-                    stderr.write('Failed to lock %s\n' % lock_file)
-                    raise e
-
-                run([ 'git', 'fetch', dir ])
-
-                branch = 'runs-%s' % base_sha
-
-                if not success('git', 'show-branch', branch):
-                    run([ 'git', 'branch', branch, base_sha ])
-
-                run([ 'git', 'checkout', branch ])
-
-                # Apply the run commit on top of the branch of commits starting from the same "base" SHA of the underlying
-                # module.
-                # [Hard-reset to commit] followed by [soft-reset to desired parent] and [commit -a] is an "easy" way to
-                # achieve this; it's like a cherry-pick, but that automatically blows away any conflicts and sets the
-                # latest/HEAD commit to the cherry-picked commit's version.
-                parent_sha = git_sha()
-                run([ 'git', 'reset', '--hard', run_sha ])
-                run([ 'git', 'reset', parent_sha ])
-
-                run([ 'git', 'add' ] + files)
-                run([ 'git', 'commit', '-a', '-m', msg])
-    else:
+    if scheme:
         # TODO: align branches, etc. in remote-pushing case; this probably doesn't work or make sense atm
-        # run([ 'git', 'push', runs_url ])
         raise Exception('Remote modules not supported yet')
+
+    # Module is a local directory (that is also a git repo)
+    if not runs_url:
+        # Log runs of this module in RUNS_DIR ('runs/') by default
+        runs_url = Path(url) / RUNS_DIR
+        if not runs_url.exists():
+            # Initialize fresh runs/ dir from current state of repo
+            run([ 'git', 'clone', url, runs_url ])
+
+            # git-ignore runs/ dir/repo in containing repo
+            with cd(url):
+                ensure_git_ignored(RUNS_DIR)
+
+    with cd(runs_url):
+        lock_file = Path(LOCK_FILE_NAME)
+
+        if not lock_file.exists():
+            lock_file.touch()
+
+        with lock_file.open('r') as lock:
+            try:
+                flock(lock, LOCK_EX | LOCK_NB)
+            except BlockingIOError as e:
+                stderr.write('Failed to lock %s\n' % lock_file)
+                raise e
+
+            run([ 'git', 'fetch', dir ])
+
+            branch = 'runs-%s' % base_sha
+
+            if not success('git', 'show-branch', branch):
+                run([ 'git', 'branch', branch, base_sha ])
+
+            run([ 'git', 'checkout', branch ])
+
+            # Apply the run commit on top of the branch of commits starting from the same "base" SHA of the underlying
+            # module.
+            # [Hard-reset to commit] followed by [soft-reset to desired parent] and [commit -a] is an "easy" way to
+            # achieve this; it's like a cherry-pick, but that automatically blows away any conflicts and sets the
+            # latest/HEAD commit to the cherry-picked commit's version.
+            parent_sha = git_sha()
+            run([ 'git', 'reset', '--hard', run_sha ])
+            run([ 'git', 'reset', parent_sha ])
+
+            run([ 'git', 'add' ] + files)
+            run([ 'git', 'commit', '-a', '-m', msg])
 
 
 if __name__ == '__main__':
