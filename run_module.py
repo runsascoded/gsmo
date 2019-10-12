@@ -5,6 +5,7 @@ from fcntl import flock, LOCK_EX, LOCK_NB
 from pytz import utc
 from subprocess import check_call, CalledProcessError
 from sys import stderr
+from tempfile import TemporaryDirectory
 
 from cd import cd
 from conf import *
@@ -22,8 +23,15 @@ def load_state_paths():
     return None
 
 
-def clone_and_run_module(path, dir, runs_path=None, upstream_branch=None, lock_timeout_s=600):
+def clone_and_run_module(path, dir=None, runs_path=None, upstream_branch=None, lock_timeout_s=600):
+    if not dir:
+        with TemporaryDirectory() as dir:
+            return clone_and_run_module(path, dir, runs_path, upstream_branch, lock_timeout_s)
+
     dir = Path(dir)
+    dir = dir.absolute().resolve()
+
+    path = Path(path).absolute().resolve()
 
     run([ 'git', 'clone', path, dir])
 
@@ -78,7 +86,9 @@ def clone_and_run_module(path, dir, runs_path=None, upstream_branch=None, lock_t
 
     if not runs_path:
         # Log runs of this module in RUNS_DIR ('runs/') by default
-        runs_path = Path(path) / RUNS_DIR
+        runs_path = path / RUNS_DIR
+
+    runs_path = runs_path.absolute().resolve()
 
     if not runs_path.exists():
         # Initialize fresh runs/ dir from current state of repo
@@ -87,7 +97,8 @@ def clone_and_run_module(path, dir, runs_path=None, upstream_branch=None, lock_t
     print('Pulling tmpdir changes into runs repo %s' % runs_path)
     with cd(runs_path):
         with lock(LOCK_FILE_NAME, lock_timeout_s):
-            run([ 'git', 'fetch', '--multiple', dir, path ])
+            run([ 'git', 'fetch', dir ])
+            run([ 'git', 'fetch', path ])
 
             runs_branch = 'runs-%s' % base_sha
             runs_branch_sha = git.checkout_and_reset(runs_branch, base_sha, run_sha)
@@ -118,15 +129,27 @@ def clone_and_run_module(path, dir, runs_path=None, upstream_branch=None, lock_t
                     print('Committing state updates')
                     msg = '%s: update state' % now_str
                     run([ 'git', 'commit', '-m', msg])
+                    if parent_sha != state_branch_sha:
+                        stderr.write('State branch %s seems to be getting clobbered: originally %s, then %s, resetting to %s (%s)' % (
+                            state_branch,
+                            parent_sha,
+                            state_branch_sha,
+                            run_sha,
+                            git.sha()
+                        ))
                 else:
                     print('No state updates found')
                     run([ 'git', 'reset', '--hard', state_branch_sha ])
 
+    print('Module finished: %s' % path)
 
 if __name__ == '__main__':
     parser = ArgumentParser()
-    parser.add_argument('url', help='Module Git repo / directory to run')
-    parser.add_argument('dir', help='Local directory to clone into and work in')
-    parser.add_argument('runs_url', required=False, default=None, help='Local directory to additionally clone module into and record run in')
+    add_argument = parser.add_argument
+    add_argument('url', help='Module Git repo / directory to run')
+    add_argument('dir', nargs='?', default=None, help='Local directory to clone into and work in')
+    add_argument('runs_url', nargs='?', default=None, help='Local directory to additionally clone module into and record run in')
+    add_argument('-l', '--lock_timeout_s', default=600, required=False, help='Timeout (s) for locking git dirs being operated on')
+    add_argument('-u', '--upstream_branch', default=None, required=False, help='Override upstream branch to anchor runs- and state- branches to (for stateful modules)')
     args = parser.parse_args()
     clone_and_run_module(args.url, args.dir, args.runs_url)

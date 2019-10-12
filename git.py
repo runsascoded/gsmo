@@ -4,7 +4,7 @@ from run import run, success
 from subprocess import check_call, check_output
 
 def sha(*args):
-    return check_output([ 'git', 'log', '--no-walk', '--format=%h' ] + args).decode().strip()
+    return check_output([ 'git', 'log', '--no-walk', '--format=%h' ] + list(args)).decode().strip()
 
 
 def is_git_ignored(path):
@@ -20,7 +20,7 @@ def ensure_git_ignored(path):
 
 
 def tree(*args):
-    return check_output([ 'git', 'log', '--no-walk', '--format=%T' ] + args).decode().strip()
+    return check_output([ 'git', 'log', '--no-walk', '--format=%T' ] + list(args)).decode().strip()
 
 
 def commit_tree(msg, *parents):

@@ -21,7 +21,7 @@ def timeout(seconds):
 @contextmanager
 def lock(path, timeout_s):
     path = Path(path)
-    parent = path.parent()
+    parent = path.parent
     parent.mkdir(parents=True, exist_ok=True)
     with timeout(timeout_s):
         with path.open("w") as f:
