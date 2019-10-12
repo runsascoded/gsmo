@@ -1,10 +1,10 @@
 
 from pathlib import Path
-from run import success
-from subprocess import check_output
+from run import run, success
+from subprocess import check_call, check_output
 
-def git_sha():
-    return check_output([ 'git', 'log', '--no-walk', '--format=%h' ]).decode().strip()
+def sha(*args):
+    return check_output([ 'git', 'log', '--no-walk', '--format=%h' ] + args).decode().strip()
 
 
 def is_git_ignored(path):
@@ -19,3 +19,40 @@ def ensure_git_ignored(path):
                 f.write('%s\n' % str(path))
 
 
+def tree(*args):
+    return check_output([ 'git', 'log', '--no-walk', '--format=%T' ] + args).decode().strip()
+
+
+def commit_tree(msg, *parents):
+    tree_sha = tree()
+    check_call([ 'git', 'commit-tree', tree_sha ] + parents + [ '-m', msg ])
+
+
+def is_ancestor(ancestor, descendent):
+    return success([ 'git', 'merge-base', '--is-ancestor', ancestor, descendent ])
+
+
+def get_upstream():
+    return check_output([ 'git', 'rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{u}' ])
+
+
+def checkout(branch, default_sha):
+    if not success('git', 'show-branch', branch):
+        run([ 'git', 'branch', branch, default_sha ])
+        run([ 'git', 'checkout', branch ])
+        return default_sha
+
+    run([ 'git', 'checkout', branch ])
+    return sha()
+
+
+def checkout_and_reset(branch, default_sha, new_tree):
+    """Force the working tree to match `new_tree` while the branch points to `default_sha`.
+
+    After creating the branch if necessary, leaves staged/unstaged changes ready to be committed,
+    simulating an in-progress cherry-pick of `new_tree` on top of the branch's current SHA.
+    """
+    current_sha = checkout(branch, default_sha)
+    run([ 'git', 'reset', '--hard', new_tree ])
+    run([ 'git', 'reset', current_sha ])
+    return current_sha

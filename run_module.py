@@ -5,23 +5,40 @@ from fcntl import flock, LOCK_EX, LOCK_NB
 from pytz import utc
 from subprocess import check_call, CalledProcessError
 from sys import stderr
-from urllib.parse import urlparse
 
 from cd import cd
 from conf import *
-from git import git_sha, ensure_git_ignored
+import git
+from lock import lock
 from run import run, success
 
 
-def clone_and_run_module(url, dir, runs_url=None):
-    dir = Path(dir)
-    parsed = urlparse(url)
-    scheme = parsed.scheme
+def load_state_paths():
+    path = Path(STATE_FILE)
+    if path.exists():
+        with path.open('r') as f:
+            return [ line[:-1] for line in f.readlines() ]
 
-    run([ 'git', 'clone', url, dir ])
+    return None
+
+
+def clone_and_run_module(path, dir, runs_path=None, upstream_branch=None, lock_timeout_s=600):
+    dir = Path(dir)
+
+    run([ 'git', 'clone', path, dir])
 
     with cd(dir):
-        base_sha = git_sha()
+
+        state_paths = load_state_paths()
+
+        base_sha = git.sha()
+        if state_paths:
+            if not upstream_branch:
+                upstream_branch = git.get_upstream()
+
+            parent_sha = base_sha
+            base_sha = git.sha(upstream_branch)
+
         run_script = dir / RUN_SCRIPT
         if not run_script.exists():
             raise Exception('No runner script found at %s' % run_script)
@@ -56,58 +73,54 @@ def clone_and_run_module(url, dir, runs_url=None):
         run([ 'git', 'add' ] + files)
         run([ 'git', 'commit', '-a', '-m', msg ])
 
-        run_sha = git_sha()
+        run_sha = git.sha()
         print('Commit SHA: %s' % run_sha)
 
-    if scheme:
-        # TODO: align branches, etc. in remote-pushing case; this probably doesn't work or make sense atm
-        raise Exception('Remote modules not supported yet')
-
-    # Module is a local directory (that is also a git repo)
-    if not runs_url:
+    if not runs_path:
         # Log runs of this module in RUNS_DIR ('runs/') by default
-        runs_url = Path(url) / RUNS_DIR
-        if not runs_url.exists():
-            # Initialize fresh runs/ dir from current state of repo
-            run([ 'git', 'clone', url, runs_url ])
+        runs_path = Path(path) / RUNS_DIR
 
-            # git-ignore runs/ dir/repo in containing repo
-            with cd(url):
-                ensure_git_ignored(RUNS_DIR)
+    if not runs_path.exists():
+        # Initialize fresh runs/ dir from current state of repo
+        run([ 'git', 'clone', path, runs_path])
 
-    with cd(runs_url):
-        lock_file = Path(LOCK_FILE_NAME)
+    print('Pulling tmpdir changes into runs repo %s' % runs_path)
+    with cd(runs_path):
+        with lock(LOCK_FILE_NAME, lock_timeout_s):
+            run([ 'git', 'fetch', '--multiple', dir, path ])
 
-        if not lock_file.exists():
-            lock_file.touch()
-
-        with lock_file.open('r') as lock:
-            try:
-                flock(lock, LOCK_EX | LOCK_NB)
-            except BlockingIOError as e:
-                stderr.write('Failed to lock %s\n' % lock_file)
-                raise e
-
-            run([ 'git', 'fetch', dir ])
-
-            branch = 'runs-%s' % base_sha
-
-            if not success('git', 'show-branch', branch):
-                run([ 'git', 'branch', branch, base_sha ])
-
-            run([ 'git', 'checkout', branch ])
-
-            # Apply the run commit on top of the branch of commits starting from the same "base" SHA of the underlying
-            # module.
-            # [Hard-reset to commit] followed by [soft-reset to desired parent] and [commit -a] is an "easy" way to
-            # achieve this; it's like a cherry-pick, but that automatically blows away any conflicts and sets the
-            # latest/HEAD commit to the cherry-picked commit's version.
-            parent_sha = git_sha()
-            run([ 'git', 'reset', '--hard', run_sha ])
-            run([ 'git', 'reset', parent_sha ])
+            runs_branch = 'runs-%s' % base_sha
+            runs_branch_sha = git.checkout_and_reset(runs_branch, base_sha, run_sha)
 
             run([ 'git', 'add' ] + files)
             run([ 'git', 'commit', '-a', '-m', msg])
+
+            if state_paths:
+                state_branch_sha = parent_sha
+                if state_branch_sha != runs_branch_sha and not git.is_ancestor(state_branch_sha, runs_branch):
+                    print(
+                        'Rewriting commit as a merge of runs branch (%s: %s) and parent state %s' % (runs_branch, runs_branch_sha, state_branch_sha)
+                    )
+                    parents = [ state_branch_sha, runs_branch_sha ]
+                    git.commit_tree(msg, *parents)
+
+    if state_paths:
+        print('Checking for state updates in %s' % path)
+        with cd(path):
+            with lock(LOCK_FILE_NAME, lock_timeout_s):
+                run([ 'git', 'fetch', runs_path ])
+
+                state_branch = 'state-%s' % base_sha
+                state_branch_sha = git.checkout_and_reset(state_branch, parent_sha, run_sha)
+
+                run([ 'git', 'add', '-u', ] + state_paths)
+                if success([ 'git', 'diff', '--cached', '-q' ]):
+                    print('Committing state updates')
+                    msg = '%s: update state' % now_str
+                    run([ 'git', 'commit', '-m', msg])
+                else:
+                    print('No state updates found')
+                    run([ 'git', 'reset', '--hard', state_branch_sha ])
 
 
 if __name__ == '__main__':
