@@ -11,7 +11,7 @@ from cd import cd
 from conf import *
 import git
 from lock import lock
-from run import run, success
+from run import line, lines, run, success
 
 
 def load_state_paths():
@@ -20,7 +20,7 @@ def load_state_paths():
         with path.open('r') as f:
             return [ line[:-1] for line in f.readlines() ]
 
-    return None
+    return []
 
 
 def clone_and_run_module(path, dir=None, runs_path=None, upstream_branch=None, lock_timeout_s=600):
@@ -28,24 +28,43 @@ def clone_and_run_module(path, dir=None, runs_path=None, upstream_branch=None, l
         with TemporaryDirectory() as dir:
             return clone_and_run_module(path, dir, runs_path, upstream_branch, lock_timeout_s)
 
-    dir = Path(dir)
-    dir = dir.absolute().resolve()
-
+    dir  = Path( dir).absolute().resolve()
     path = Path(path).absolute().resolve()
 
     run([ 'git', 'clone', path, dir])
 
     with cd(dir):
 
+        remote = git.remote()
+        if not upstream_branch:
+            upstream_branch = DEFAULT_UPSTREAM_BRANCH
+        upstream_branch = '%s/%s' % (remote, upstream_branch)
+
+        run_base_sha = git.sha()
+        upstream_base_sha = None
+
+        state_branch = None
+        state_branch_base = None
         state_paths = load_state_paths()
-
-        base_sha = git.sha()
         if state_paths:
-            if not upstream_branch:
-                upstream_branch = git.get_upstream()
-
-            parent_sha = base_sha
-            base_sha = git.sha(upstream_branch)
+            state_branch = line([ 'git', 'for-each-ref', '--format=%(refname:short)', '--points-at=%s' % run_base_sha, STATE_BRANCH_PREFIX ], empty_ok=True)
+            if state_branch:
+                state_branch_base = state_branch[len(STATE_BRANCH_PREFIX):]
+                upstream_base_sha = state_branch_base
+                if not git.is_ancestor(upstream_branch, state_branch_base):
+                    print('Upstream %s contains commits not on state-branch %s; starting a new runs-branch from %s' % (upstream_branch, state_branch_base, upstream_branch))
+                    state_branch = None
+                    state_branch_base = None
+                    run_base_sha = git.checkout(upstream_branch)
+                    upstream_base_sha = run_base_sha
+            else:
+                # If there's no active "state" branch, make sure we're starting from the intended upstream branch.
+                # This will be whatever branch the `path` repo is currently on, unless an explicit override `upstream_branch` was passed
+                upstream_base_sha = git.sha(upstream_branch)
+                if upstream_base_sha != run_base_sha:
+                    print('Overriding cloned SHA %s to start from upstream %s (%s)' % (run_base_sha, upstream_branch, upstream_base_sha))
+                    git.checkout(upstream_branch, return_sha=False)
+                    run_base_sha = upstream_base_sha
 
         run_script = dir / RUN_SCRIPT
         if not run_script.exists():
@@ -59,7 +78,7 @@ def clone_and_run_module(path, dir=None, runs_path=None, upstream_branch=None, l
         files = [
             OUT_PATH,
             ERR_PATH,
-        ]
+        ] + state_paths
 
         cmd = [ str(run_script) ]
         with OUT_PATH.open('w') as out, ERR_PATH.open('w') as err:
@@ -100,39 +119,44 @@ def clone_and_run_module(path, dir=None, runs_path=None, upstream_branch=None, l
             run([ 'git', 'fetch', dir ])
             run([ 'git', 'fetch', path ])
 
-            runs_branch = 'runs-%s' % base_sha
-            runs_branch_sha = git.checkout_and_reset(runs_branch, base_sha, run_sha)
+            runs_branch = RUNS_BRANCH_PREFIX + upstream_base_sha
+            prev_runs_branch_sha = git.checkout_and_reset(runs_branch, upstream_base_sha, run_sha)
 
             run([ 'git', 'add' ] + files)
-            run([ 'git', 'commit', '-a', '-m', msg])
+            run([ 'git', 'commit', '-a', '--allow-empty', '-m', msg])
 
-            if state_paths:
-                state_branch_sha = parent_sha
-                if state_branch_sha != runs_branch_sha and not git.is_ancestor(state_branch_sha, runs_branch):
-                    print(
-                        'Rewriting commit as a merge of runs branch (%s: %s) and parent state %s' % (runs_branch, runs_branch_sha, state_branch_sha)
-                    )
-                    parents = [ state_branch_sha, runs_branch_sha ]
-                    git.commit_tree(msg, *parents)
+            if state_branch_base and \
+                state_branch_base != prev_runs_branch_sha and \
+                not git.is_ancestor(state_branch_base, runs_branch):
+                print(
+                    'Rewriting commit as a merge of runs branch (%s: %s) and parent state %s' % (runs_branch, prev_runs_branch_sha, state_branch_base)
+                )
+                parents = [ state_branch_base, prev_runs_branch_sha ]
+                git.commit_tree(msg, *parents)
 
     if state_paths:
         print('Checking for state updates in %s' % path)
         with cd(path):
             with lock(LOCK_FILE_NAME, lock_timeout_s):
                 run([ 'git', 'fetch', runs_path ])
+                run([ 'git', 'fetch', dir ])
 
-                state_branch = 'state-%s' % base_sha
-                state_branch_sha = git.checkout_and_reset(state_branch, parent_sha, run_sha)
+                if not state_branch:
+                    state_branch = STATE_BRANCH_PREFIX + upstream_base_sha
 
-                run([ 'git', 'add', '-u', ] + state_paths)
-                if success([ 'git', 'diff', '--cached', '-q' ]):
+                state_branch_sha = git.checkout_and_reset(state_branch, upstream_base_sha, run_sha)
+
+                run([ 'git', 'add' ] + state_paths)
+                # run([ 'git', 'add', '-u', '.'])
+                if not success('git', 'diff', '--cached', '--quiet'):
                     print('Committing state updates')
                     msg = '%s: update state' % now_str
                     run([ 'git', 'commit', '-m', msg])
-                    if parent_sha != state_branch_sha:
-                        stderr.write('State branch %s seems to be getting clobbered: originally %s, then %s, resetting to %s (%s)' % (
+                    #run([ 'git', 'reset', '--hard', 'HEAD'])
+                    if state_branch_base and state_branch_base != state_branch_sha:
+                        stderr.write('State branch %s seems to be getting clobbered: originally %s, then %s, coercing to %s (final SHA: %s)' % (
                             state_branch,
-                            parent_sha,
+                            state_branch_base,
                             state_branch_sha,
                             run_sha,
                             git.sha()
@@ -150,6 +174,6 @@ if __name__ == '__main__':
     add_argument('dir', nargs='?', default=None, help='Local directory to clone into and work in')
     add_argument('runs_url', nargs='?', default=None, help='Local directory to additionally clone module into and record run in')
     add_argument('-l', '--lock_timeout_s', default=600, required=False, help='Timeout (s) for locking git dirs being operated on')
-    add_argument('-u', '--upstream_branch', default=None, required=False, help='Override upstream branch to anchor runs- and state- branches to (for stateful modules)')
+    add_argument('-u', '--upstream_branch', default=None, required=False, help='Override upstream branch to anchor %s and %s branches to (for stateful modules)' % (RUNS_BRANCH_PREFIX, STATE_BRANCH_PREFIX))
     args = parser.parse_args()
     clone_and_run_module(args.url, args.dir, args.runs_url)
