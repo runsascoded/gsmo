@@ -69,6 +69,11 @@ def checkout_and_reset(branch, default_sha, new_tree):
     return current_sha
 
 
+def fetch(*remotes):
+    for remote in remotes:
+        run([ 'git', 'fetch', remote ])
+
+
 def remote(name=None):
     if name is None:
         return line([ 'git', 'remote' ])
