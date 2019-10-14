@@ -125,3 +125,8 @@ def push(remote, src=None, dest=None):
         run([ 'git', 'merge', '-X', 'ours', '--no-edit', '%s/%s' % (remote, dest) ])
         print('Trying to push again:')
         run(cmd)
+
+
+def add(files, *args):
+    paths = [ file for file in files if Path(file).exists() ]
+    run([ 'git', 'add' ] + list(args) + [ '--' ] + paths)
