@@ -31,33 +31,43 @@ def clone_and_run_module(path, dir=None, runs_path=None, upstream_branch=None, l
     dir  = Path( dir).absolute().resolve()
     path = Path(path).absolute().resolve()
 
+    with cd(path):
+        git.allow_pushes()
+
+    if not runs_path:
+        # Log runs of this module in RUNS_DIR ('runs/') by default
+        runs_path = path / RUNS_DIR
+
+    runs_path = runs_path.absolute().resolve()
+
+    if not runs_path.exists():
+        # Initialize fresh runs/ dir from current state of repo
+        run([ 'git', 'clone', path, runs_path])
+
+    with cd(runs_path):
+        git.allow_pushes()
+
     run([ 'git', 'clone', path, dir])
 
     with cd(dir):
-
         remote = git.remote()
-        force_upstream_branch = True
+
+        run([ 'git', 'config', 'advice.detachedHead', 'false' ])
+
         if not upstream_branch:
             upstream_branch = DEFAULT_UPSTREAM_BRANCH
-            force_upstream_branch = False
         upstream_remote_branch = '%s/%s' % (remote, upstream_branch)
 
         original_upstream_sha = git.sha(upstream_remote_branch)
-        sha = git.sha()
-        if original_upstream_sha != sha and force_upstream_branch:
-            print('Overriding cloned SHA %s to start from upstream %s (%s)' % (sha, upstream_remote_branch, original_upstream_sha))
-            git.checkout(original_upstream_sha)
-            sha = original_upstream_sha
+        print('Working from upstream branch %s (%s)' % (upstream_remote_branch, original_upstream_sha))
 
-        upstream_base_sha = sha
+        base_sha = git.sha()
+        if original_upstream_sha != base_sha:
+            print('Overriding cloned HEAD %s to start from upstream %s (%s)' % (base_sha, upstream_remote_branch, original_upstream_sha))
+            git.checkout(upstream_remote_branch)
+            base_sha = original_upstream_sha
 
-        state_branch = None
         state_paths = load_state_paths()
-        if state_paths:
-            state_branch = line([ 'git', 'for-each-ref', '--format=%(refname:short)', '--points-at=%s' % sha, STATE_BRANCH_PREFIX ], empty_ok=True)
-            if state_branch:
-                state_branch_sha = git.sha(state_branch)
-                upstream_base_sha = state_branch[len(STATE_BRANCH_PREFIX):]
 
         run_script = dir / RUN_SCRIPT
         if not run_script.exists():
@@ -91,92 +101,43 @@ def clone_and_run_module(path, dir=None, runs_path=None, upstream_branch=None, l
         msg = '%s: %s' % (now_str, status)
 
         run([ 'git', 'add' ] + files)
-        run([ 'git', 'commit', '-a', '-m', msg ])
+        run([ 'git', 'commit', '-a', '--allow-empty', '-m', msg ])
 
         run_sha = git.sha()
-        print('Commit SHA: %s' % run_sha)
+        print('Committed run: %s' % run_sha)
 
-    if not runs_path:
-        # Log runs of this module in RUNS_DIR ('runs/') by default
-        runs_path = path / RUNS_DIR
+        run([ 'git', 'remote', 'add', RUNS_REMOTE, runs_path ])
+        git.fetch(RUNS_REMOTE)
+        runs_head = '%s/%s' % (RUNS_REMOTE, RUNS_BRANCH)
+        runs_sha = git.sha(runs_head, missing_ok=True)
+        if not runs_sha:
+            print('Initializing "%s" branch in "%s" remote to current run SHA: %s' % (RUNS_BRANCH, RUNS_REMOTE, run_sha))
+            run([ 'git', 'branch', RUNS_BRANCH, run_sha ])
+        elif git.is_ancestor(base_sha, runs_sha):
+            new_run_sha = git.commit_tree(msg, runs_sha, sha=run_sha)
+            print("Changing latest run %s parent from base SHA %s to %s/%s SHA %s; now %s" % (run_sha, base_sha, RUNS_REMOTE, RUNS_BRANCH, runs_sha, new_run_sha))
+            run_sha = new_run_sha
+        elif git.is_ancestor(runs_sha, base_sha):
+            print('Base SHA %s descends from %s/%s SHA %s; using existing run SHA %s' % (base_sha, RUNS_REMOTE, RUNS_BRANCH, runs_sha, run_sha))
+        else:
+            new_run_sha = git.commit_tree(msg, base_sha, runs_sha, sha=run_sha)
+            print('Giving latest run %s two parents: base SHA %s and %s/%s SHA %s; now %s' % (run_sha, base_sha, RUNS_REMOTE, RUNS_BRANCH, runs_sha, new_run_sha))
+            run_sha = new_run_sha
 
-    runs_path = runs_path.absolute().resolve()
+        git.push(RUNS_REMOTE, dest=RUNS_BRANCH)
 
-    if not runs_path.exists():
-        # Initialize fresh runs/ dir from current state of repo
-        run([ 'git', 'clone', path, runs_path])
-
-    print('Pulling tmpdir changes into runs repo %s' % runs_path)
-    with cd(runs_path):
-        with lock(LOCK_FILE_NAME, lock_timeout_s):
-            git.fetch(dir, path)
-
-            runs_branch = RUNS_BRANCH_PREFIX + upstream_base_sha
-            prev_runs_branch_sha = git.checkout_and_reset(runs_branch, upstream_base_sha, run_sha)
-
-            run([ 'git', 'add' ] + files)
-            run([ 'git', 'commit', '-a', '--allow-empty', '-m', msg])
-
-            if state_branch_sha and not git.is_ancestor(state_branch_sha, runs_branch):
-                print(
-                    'Rewriting commit as a merge of runs branch (%s: %s) and parent state %s' % (runs_branch, prev_runs_branch_sha, state_branch_sha)
-                )
-                parents = [ state_branch_sha, prev_runs_branch_sha ]
-                git.commit_tree(msg, *parents)
-
-    if state_paths:
-        print('Checking for state updates in %s' % path)
-        with cd(path):
-            with lock(LOCK_FILE_NAME, lock_timeout_s):
-                git.fetch(runs_path, dir)
-
-                if not state_branch:
-                    state_branch = STATE_BRANCH_PREFIX + upstream_base_sha
-
-                upstream_branch_sha = git.sha(upstream_branch)
-                # new_upstream_sha = git.checkout_and_reset(upstream_branch, None, run_sha)
-
-                if upstream_branch_sha != original_upstream_sha:
-                    original_state_branch_sha = git.checkout(state_branch, original_upstream_sha)
-                    run([ 'git', 'add' ] + state_paths)
-                    if not success('git', 'diff', '--cached', '--quiet'):
-                        print('Committing state updates')
-                        msg = '%s: update state' % now_str
-                        run([ 'git', 'commit', '-m', msg])
-                    else:
-                        print('No state upstead')
-                    stderr.write('Upstream branch %s seems to have moved since run started: originally %s, now %s; adding run commit %s to %s branch' % (
-                        upstream_branch,
-                        original_upstream_sha,
-                        upstream_branch_sha,
-                        run_sha,
-                        state_branch
-                    ))
-                else:
-
-                HEAD = new_upstream_sha
-                run([ 'git', 'add' ] + state_paths)
-                # run([ 'git', 'add', '-u', '.'])
-                if not success('git', 'diff', '--cached', '--quiet'):
-                    print('Committing state updates')
-                    msg = '%s: update state' % now_str
-                    run([ 'git', 'commit', '-m', msg])
-                    HEAD = git.sha()
-                    if new_upstream_sha != original_upstream_sha:
-                        stderr.write('Upstream branch %s seems to be getting clobbered: originally %s, then %s, coercing to %s (final SHA: %s)' % (
-                            upstream_branch,
-                            original_upstream_sha,
-                            new_upstream_sha,
-                            run_sha,
-                            HEAD
-                        ))
-                else:
-                    print('No state updates found')
-
-                print('Setting state branch %s to HEAD (%s)' % (state_branch, HEAD))
-                run([ 'git', 'reset', '--hard', 'HEAD' ])
-                run([ 'git', 'branch', '-f', state_branch, 'HEAD' ])
-
+        if state_paths:
+            git.checkout_and_reset(original_upstream_sha, None, run_sha, is_branch=False)
+            run([ 'git', 'add' ] + state_paths)
+            if not success('git', 'diff', '--cached', '--quiet'):
+                print('Committing state updates')
+                msg = '%s: update state' % now_str
+                run([ 'git', 'commit', '-m', msg])
+                print('Setting parents to base SHA %s and run SHA %s' % (base_sha, run_sha))
+                sha = git.commit_tree(msg, base_sha, run_sha)
+                git.push(remote, src=sha, dest=upstream_branch)
+            else:
+                print('No state upstead')
 
     print('Module finished: %s' % path)
 

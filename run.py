@@ -25,18 +25,22 @@ def output(cmd, stderr=None):
     return check_output(cmd, **kwargs).decode()
 
 
-def lines(cmd, stderr=None):
+def lines(cmd, stderr=None, keep_empty_last_line=False):
     out = output(cmd, stderr)
-    return [ line[:-1] for line in out.split('\n') ]
+    lines = out.split('\n')
+    if lines and lines[-1] == '' and not keep_empty_last_line:
+        lines = lines[:-1]
+    return lines
 
 
+_lines = lines
 def line(cmd, stderr=None, empty_ok=False):
-    _lines = lines(cmd, stderr)
-    num_lines = len(_lines)
-    empty = num_lines == 0 or _lines == ['']
+    lines = _lines(cmd, stderr)
+    num_lines = len(lines)
+    empty = num_lines == 0
     expected = '0 or 1' if empty_ok else '1'
     if (empty and not empty_ok) or num_lines > 1:
-        raise Exception('Found %d lines; expected %s:\n%s' % (num_lines, expected, '\n\t'.join(_lines)))
+        raise Exception('Found %d lines; expected %s:\n\t%s' % (num_lines, expected, '\n\t'.join(lines)))
     if empty:
         return None
-    return _lines[0]
+    return lines[0]

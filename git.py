@@ -3,8 +3,17 @@ from pathlib import Path
 from run import line, lines, output, run, success
 from subprocess import CalledProcessError, check_call, check_output, DEVNULL
 
-def sha(*args):
-    return check_output([ 'git', 'log', '--no-walk', '--format=%h' ] + list(args)).decode().strip()
+def sha(*args, missing_ok=False):
+    cmd = [ 'git', 'log', '--no-walk', '--format=%h' ] + list(args) + [ '--' ]
+    if missing_ok:
+        try:
+            output = check_output(cmd)
+        except CalledProcessError:
+            return None
+    else:
+        output = check_output(cmd)
+
+    return output.decode().strip()
 
 
 def is_git_ignored(path):
@@ -23,9 +32,19 @@ def tree(*args):
     return check_output([ 'git', 'log', '--no-walk', '--format=%T' ] + list(args)).decode().strip()
 
 
-def commit_tree(msg, *parents):
-    tree_sha = tree()
-    check_call([ 'git', 'commit-tree', tree_sha ] + parents + [ '-m', msg ])
+_sha = sha
+def commit_tree(msg, *parents, sha=None):
+    if sha:
+        tree_sha = tree(sha)
+    else:
+        tree_sha = tree()
+    parent_args = [
+        arg
+        for parent in parents
+        for arg in [ '-p', parent ]
+    ]
+    sha = line([ 'git', 'commit-tree', tree_sha, '-m', msg ] + parent_args)
+    return sha
 
 
 def is_ancestor(ancestor, descendent):
@@ -43,8 +62,8 @@ def get_upstream(default=None):
     return check_output(cmd).decode().strip()
 
 
-def checkout(branch, default_sha=None, return_sha=True):
-    if not success('git', 'show-branch', branch):
+def checkout(branch, default_sha=None, return_sha=True, is_branch=True):
+    if is_branch and not success('git', 'show-branch', branch):
         if not default_sha:
             raise Exception('Branch %s not found, and no default SHA provided' % branch)
         run([ 'git', 'branch', branch, default_sha ])
@@ -57,13 +76,13 @@ def checkout(branch, default_sha=None, return_sha=True):
     return None
 
 
-def checkout_and_reset(branch, default_sha, new_tree):
+def checkout_and_reset(branch, default_sha, new_tree, is_branch=True):
     """Force the working tree to match `new_tree` while the branch points to `default_sha`.
 
     After creating the branch if necessary, leaves staged/unstaged changes ready to be committed,
     simulating an in-progress cherry-pick of `new_tree` on top of the branch's current SHA.
     """
-    current_sha = checkout(branch, default_sha)
+    current_sha = checkout(branch, default_sha, is_branch=is_branch)
     run([ 'git', 'reset', '--hard', new_tree ])
     run([ 'git', 'reset', current_sha ])
     return current_sha
@@ -79,3 +98,30 @@ def remote(name=None):
         return line([ 'git', 'remote' ])
 
     return line([ 'git', 'remote', 'get-url', name ])
+
+
+def allow_pushes():
+    run([ 'git', 'config', 'receive.denyCurrentBranch', 'ignore' ])
+
+
+def exists(refspec):
+    return success('git', 'show-branch', refspec)
+
+
+def push(remote, src=None, dest=None):
+    if dest is None or src == dest:
+        dest = src
+        refspec = dest
+    else:
+        if src is None and dest is not None:
+            src = 'HEAD'
+        refspec = '%s:%s' % (src, dest)
+
+    cmd = [ 'git', 'push', remote, refspec ]
+    try:
+        run(cmd)
+    except CalledProcessError:
+        print('Failed to push %s/%s; attempting a merge:' % (remote, refspec))
+        run([ 'git', 'merge', '-X', 'ours', '--no-edit', '%s/%s' % (remote, dest) ])
+        print('Trying to push again:')
+        run(cmd)
