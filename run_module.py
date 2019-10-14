@@ -26,7 +26,7 @@ def load_state_paths():
 def clone_and_run_module(path, dir=None, runs_path=None, upstream_branch=None, lock_timeout_s=600, keep_tmpdir=False):
     if not dir:
         if keep_tmpdir:
-            dir = TemporaryDirectory()
+            dir = TemporaryDirectory().name
         else:
             with TemporaryDirectory() as dir:
                 return clone_and_run_module(path, dir, runs_path, upstream_branch, lock_timeout_s)
