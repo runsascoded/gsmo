@@ -100,7 +100,7 @@ def clone_and_run_module(path, dir=None, runs_path=None, upstream_branch=None, l
 
         msg = '%s: %s' % (now_str, status)
 
-        run([ 'git', 'add' ] + files)
+        run([ 'git', 'add', '--ignore-missing' ] + files)
         run([ 'git', 'commit', '-a', '--allow-empty', '-m', msg ])
 
         run_sha = git.sha()
@@ -128,7 +128,7 @@ def clone_and_run_module(path, dir=None, runs_path=None, upstream_branch=None, l
 
         if state_paths:
             git.checkout_and_reset(original_upstream_sha, None, run_sha, is_branch=False)
-            run([ 'git', 'add' ] + state_paths)
+            run([ 'git', 'add', '--ignore-missing' ] + state_paths)
             if not success('git', 'diff', '--cached', '--quiet'):
                 print('Committing state updates')
                 msg = '%s: update state' % now_str
