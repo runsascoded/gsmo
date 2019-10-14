@@ -152,6 +152,6 @@ if __name__ == '__main__':
     add_argument('runs_url', nargs='?', default=None, help='Local directory to additionally clone module into and record run in')
     add_argument('-l', '--lock_timeout_s', default=600, required=False, help='Timeout (s) for locking git dirs being operated on')
     add_argument('-u', '--upstream_branch', default=None, required=False, help='Override upstream branch to anchor %s and %s branches to (for stateful modules)' % (RUNS_BRANCH_PREFIX, STATE_BRANCH_PREFIX))
-    add_argument('-k', '--keep_tmpdir', default=False, required=False, help="If working dir <dir> isn't provided, a temporary working dir will be created. When this flag is set, such a tmpdir will not be removed after the run completes (which can be useful for debugging)")
+    add_argument('-k', '--keep_tmpdir', default=False, action='store_true', help="If working dir <dir> isn't provided, a temporary working dir will be created. When this flag is set, such a tmpdir will not be removed after the run completes (which can be useful for debugging)")
     args = parser.parse_args()
     clone_and_run_module(args.url, args.dir, args.runs_url, keep_tmpdir=args.keep_tmpdir)
