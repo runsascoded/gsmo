@@ -127,7 +127,7 @@ def clone_and_run_module(path, dir=None, runs_path=None, upstream_branch=None, l
             print('Giving latest run %s two parents: base SHA %s and %s/%s SHA %s; now %s' % (run_sha, base_sha, RUNS_REMOTE, RUNS_BRANCH, runs_sha, new_run_sha))
             run_sha = new_run_sha
 
-        git.push(RUNS_REMOTE, dest=RUNS_BRANCH)
+        git.push(RUNS_REMOTE, src=run_sha, dest=RUNS_BRANCH)
 
         if state_paths:
             git.checkout_and_reset(original_upstream_sha, None, run_sha, is_branch=False)
