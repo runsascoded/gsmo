@@ -1,3 +1,0 @@
-[submodule "test/echo_module"]
-	path = test/echo_module
-	url = git@github.com:ryan-williams/echo_module.git
