@@ -113,21 +113,27 @@ def clone_and_run_module(path, dir=None, runs_path=None, upstream_branch=None, l
         git.fetch(RUNS_REMOTE)
         runs_head = '%s/%s' % (RUNS_REMOTE, RUNS_BRANCH)
         runs_sha = git.sha(runs_head, missing_ok=True)
-        if not runs_sha:
-            print('Initializing "%s" branch in "%s" remote to current run SHA: %s' % (RUNS_BRANCH, RUNS_REMOTE, run_sha))
+
+        if not git.exists(RUNS_BRANCH):
             run([ 'git', 'branch', RUNS_BRANCH, run_sha ])
-        elif git.is_ancestor(base_sha, runs_sha):
-            new_run_sha = git.commit_tree(msg, runs_sha, sha=run_sha)
-            print("Changing latest run %s parent from base SHA %s to %s/%s SHA %s; now %s" % (run_sha, base_sha, RUNS_REMOTE, RUNS_BRANCH, runs_sha, new_run_sha))
-            run_sha = new_run_sha
+        git.checkout(RUNS_BRANCH)
+
+        if not runs_sha:
+            print('%s branch doesn\'t exist on remote %s; created locally with current run SHA: %s' % (RUNS_BRANCH, RUNS_REMOTE, run_sha))
         elif git.is_ancestor(runs_sha, base_sha):
             print('Base SHA %s descends from %s/%s SHA %s; using existing run SHA %s' % (base_sha, RUNS_REMOTE, RUNS_BRANCH, runs_sha, run_sha))
         else:
-            new_run_sha = git.commit_tree(msg, base_sha, runs_sha, sha=run_sha)
-            print('Giving latest run %s two parents: base SHA %s and %s/%s SHA %s; now %s' % (run_sha, base_sha, RUNS_REMOTE, RUNS_BRANCH, runs_sha, new_run_sha))
-            run_sha = new_run_sha
+            if git.is_ancestor(base_sha, runs_sha):
+                new_run_sha = git.commit_tree(msg, runs_sha, sha=run_sha)
+                print("Changing latest run %s parent from base SHA %s to %s/%s SHA %s; now %s" % (run_sha, base_sha, RUNS_REMOTE, RUNS_BRANCH, runs_sha, new_run_sha))
+            else:
+                new_run_sha = git.commit_tree(msg, base_sha, runs_sha, sha=run_sha)
+                print('Giving latest run %s two parents: base SHA %s and %s/%s SHA %s; now %s' % (run_sha, base_sha, RUNS_REMOTE, RUNS_BRANCH, runs_sha, new_run_sha))
 
-        git.push(RUNS_REMOTE, src=run_sha, dest=RUNS_BRANCH)
+            run_sha = new_run_sha
+            run([ 'git', 'reset', '--hard', run_sha ])
+
+        git.push(RUNS_REMOTE, dest=RUNS_BRANCH)
 
         if state_paths:
             git.checkout_and_reset(original_upstream_sha, None, run_sha, is_branch=False)
