@@ -1,13 +1,13 @@
 
 from pathlib import Path
-from run import line, lines, output, run, success
-from subprocess import CalledProcessError, check_call, check_output, DEVNULL
+from run import line, run, success
+from subprocess import CalledProcessError, check_output, DEVNULL
 
 def sha(*args, missing_ok=False):
     cmd = [ 'git', 'log', '--no-walk', '--format=%h' ] + list(args) + [ '--' ]
     if missing_ok:
         try:
-            output = check_output(cmd)
+            output = check_output(cmd, stderr=DEVNULL)
         except CalledProcessError:
             return None
     else:
