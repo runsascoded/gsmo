@@ -13,4 +13,4 @@ if [ ! -z "$before_first_slash" ]; then
   module="$PWD/$module"
 fi
 
-docker run -v $module:/src cron:latest
+docker run -v $module:/src "$@" cron:latest
