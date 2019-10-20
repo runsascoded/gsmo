@@ -1,24 +1,23 @@
 
 from argparse import ArgumentParser
 from datetime import datetime as dt
-from fcntl import flock, LOCK_EX, LOCK_NB
 from pytz import utc
 from subprocess import check_call, CalledProcessError
-from sys import stderr
 from tempfile import TemporaryDirectory
 
 from cd import cd
 from conf import *
 import git
-from lock import lock
-from run import line, lines, run, success
+from run import run, success
 
 
 def load_state_paths():
     path = Path(STATE_FILE)
     if path.exists():
         with path.open('r') as f:
-            return [ Path(line[:-1]) for line in f.readlines() ]
+            paths = [ Path(line[:-1]) for line in f.readlines() ]
+            print('Found state paths:\n\t%s' % '\n\t'.join(paths))
+            return paths
 
     return []
 
@@ -146,7 +145,7 @@ def clone_and_run_module(path, dir=None, runs_path=None, upstream_branch=None, l
                 sha = git.commit_tree(msg, base_sha, run_sha)
                 git.push(remote, src=sha, dest=upstream_branch)
             else:
-                print('No state upstead')
+                print('No state updates')
 
     print('Module finished: %s' % path)
 

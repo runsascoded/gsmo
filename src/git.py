@@ -129,4 +129,5 @@ def push(remote, src=None, dest=None):
 
 def add(files, *args):
     paths = [ file for file in files if Path(file).exists() ]
-    run([ 'git', 'add' ] + list(args) + [ '--' ] + paths)
+    if paths:
+        run([ 'git', 'add' ] + list(args) + [ '--' ] + paths)
