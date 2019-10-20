@@ -11,8 +11,8 @@ import git
 from run import run, success
 
 
-def load_state_paths():
-    path = Path(STATE_FILE)
+def load_config_paths(file):
+    path = Path(file)
     if path.exists():
         with path.open('r') as f:
             paths = [ Path(line[:-1]) for line in f.readlines() ]
@@ -69,7 +69,8 @@ def clone_and_run_module(path, dir=None, runs_path=None, upstream_branch=None, l
             git.checkout(upstream_remote_branch)
             base_sha = original_upstream_sha
 
-        state_paths = load_state_paths()
+        state_paths = load_config_paths(STATE_FILE)
+        out_paths = load_config_paths(OUT_FILE)
 
         run_script = dir / RUN_SCRIPT
         if not run_script.exists():
@@ -83,7 +84,7 @@ def clone_and_run_module(path, dir=None, runs_path=None, upstream_branch=None, l
         files = [
             OUT_PATH,
             ERR_PATH,
-        ] + state_paths
+        ] + state_paths + out_paths
 
         cmd = [ str(run_script) ]
         with OUT_PATH.open('w') as out, ERR_PATH.open('w') as err:
@@ -156,7 +157,13 @@ if __name__ == '__main__':
     add_argument('dir', nargs='?', default=None, help='Local directory to clone into and work in')
     add_argument('runs_url', nargs='?', default=None, help='Local directory to additionally clone module into and record run in')
     add_argument('-l', '--lock_timeout_s', default=600, required=False, help='Timeout (s) for locking git dirs being operated on')
-    add_argument('-u', '--upstream_branch', default=None, required=False, help='Override upstream branch to anchor %s and %s branches to (for stateful modules)' % (RUNS_BRANCH_PREFIX, STATE_BRANCH_PREFIX))
+    add_argument('-u', '--upstream_branch', default=None, required=False, help='Override upstream branch to clone (default: master)')
     add_argument('-k', '--keep_tmpdir', default=False, action='store_true', help="If working dir <dir> isn't provided, a temporary working dir will be created. When this flag is set, such a tmpdir will not be removed after the run completes (which can be useful for debugging)")
     args = parser.parse_args()
-    clone_and_run_module(args.url, args.dir, args.runs_url, keep_tmpdir=args.keep_tmpdir)
+    clone_and_run_module(
+        args.url,
+        args.dir,
+        args.runs_url,
+        upstream_branch=args.upstream_branch,
+        keep_tmpdir=args.keep_tmpdir
+    )
