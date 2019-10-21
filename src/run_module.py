@@ -103,7 +103,12 @@ def clone_and_run_module(path, dir=None, runs_path=None, upstream_branch=None, l
                 status = 'failure'
                 files.append(FAILURE_PATH)
 
-        msg = '%s: %s' % (now_str, status)
+        if MSG_PATH.exists():
+            with MSG_PATH.open('r') as f:
+                msg = f.read()
+            MSG_PATH.unlink()
+        else:
+            msg = '%s: %s' % (now_str, status)
 
         git.add(files)
         run([ 'git', 'commit', '-a', '--allow-empty', '-m', msg ])

@@ -6,6 +6,7 @@ RUN_SCRIPT = 'run.sh'
 RUNS_DIR = 'runs'
 STATE_FILE = '_STATE'
 OUT_FILE = '_OUT'
+MSG_PATH = '_MSG'
 
 DEFAULT_UPSTREAM_BRANCH = 'master'
 RUNS_REMOTE = 'runs'
