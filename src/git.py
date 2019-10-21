@@ -128,6 +128,17 @@ def push(remote, src=None, dest=None):
 
 
 def add(files, *args):
-    paths = [ file for file in files if Path(file).exists() ]
+    paths = []
+    missing_paths = []
+    for file in files:
+        path = Path(file)
+        if path.exists():
+            paths.append(path)
+        else:
+            missing_paths.append(str(path))
+
+    if missing_paths:
+        print('Skipping adding non-existent paths:\n%s' % '\n\t'.join(missing_paths))
+
     if paths:
         run([ 'git', 'add' ] + list(args) + [ '--' ] + paths)
