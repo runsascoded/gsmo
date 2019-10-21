@@ -16,7 +16,7 @@ def load_config_paths(file):
     if path.exists():
         with path.open('r') as f:
             paths = [ Path(line[:-1]) for line in f.readlines() ]
-            print('Found state paths:\n\t%s' % '\n\t'.join(paths))
+            print('Found paths in file %s:\n\t%s' % (file, '\n\t'.join(paths)))
             return paths
 
     return []
@@ -71,6 +71,8 @@ def clone_and_run_module(path, dir=None, runs_path=None, upstream_branch=None, l
 
         state_paths = load_config_paths(STATE_FILE)
         out_paths = load_config_paths(OUT_FILE)
+        if not out_paths:
+            out_paths = [ 'out' ]
 
         run_script = dir / RUN_SCRIPT
         if not run_script.exists():

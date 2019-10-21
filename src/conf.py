@@ -4,8 +4,8 @@ FMT= '%Y-%m-%dT%H:%M:%S'
 
 RUN_SCRIPT = 'run.sh'
 RUNS_DIR = 'runs'
-STATE_FILE = 'STATE'
-OUT_FILE = 'OUT'
+STATE_FILE = '_STATE'
+OUT_FILE = '_OUT'
 
 DEFAULT_UPSTREAM_BRANCH = 'master'
 RUNS_REMOTE = 'runs'
