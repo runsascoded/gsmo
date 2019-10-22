@@ -49,7 +49,7 @@ def clone_and_run_module(path, dir=None, runs_path=None, upstream_branch=None, l
     with cd(runs_path):
         git.allow_pushes()
 
-    run([ 'git', 'clone', '--depth=1', 'file://%s' % path, dir ])
+    run([ 'git', 'clone', path, dir ])
 
     with cd(dir):
         remote = git.remote()
