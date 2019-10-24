@@ -16,7 +16,7 @@ def load_config_paths(file):
     if path.exists():
         with path.open('r') as f:
             paths = [ Path(line[:-1]) for line in f.readlines() ]
-            print('Found paths in file %s:\n\t%s' % (file, '\n\t'.join(paths)))
+            print('Found paths in file %s:\n\t%s' % (file, '\n\t'.join([ str(path) for path in paths ])))
             return paths
 
     return []
