@@ -83,8 +83,8 @@ def checkout_and_reset(branch, default_sha, new_tree, is_branch=True):
     simulating an in-progress cherry-pick of `new_tree` on top of the branch's current SHA.
     """
     current_sha = checkout(branch, default_sha, is_branch=is_branch)
-    run([ 'git', 'reset', '--hard', new_tree ])
-    run([ 'git', 'reset', current_sha ])
+    run([ 'git', 'reset', '-q', '--hard', new_tree ])
+    run([ 'git', 'reset', '-q', current_sha ])
     return current_sha
 
 
