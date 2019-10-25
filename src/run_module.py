@@ -109,7 +109,9 @@ def clone_and_run_module(path, dir=None, runs_path=None, upstream_branch=None, l
             msg = '%s: %s' % (now_str, status)
 
         git.add(files)
-        run([ 'git', 'commit', '-a', '--allow-empty', '-m', msg ])
+
+        # "-q" is necessary when committing files >1GB; https://public-inbox.org/git/xmqqsha3o4u7.fsf@gitster-ct.c.googlers.com/t/
+        run([ 'git', 'commit', '-a', '-q', '--allow-empty', '-m', msg ])
 
         run_sha = git.sha()
         print('Committed run: %s' % run_sha)
@@ -146,7 +148,7 @@ def clone_and_run_module(path, dir=None, runs_path=None, upstream_branch=None, l
             if not success('git', 'diff', '--cached', '--quiet'):
                 print('Committing state updates')
                 msg = '%s: update state' % now_str
-                run([ 'git', 'commit', '-m', msg])
+                run([ 'git', 'commit', '-q', '-m', msg])
                 print('Setting parents to base SHA %s and run SHA %s' % (base_sha, run_sha))
                 sha = git.commit_tree(msg, base_sha, run_sha)
                 git.push(remote, src=sha, dest=upstream_branch)
