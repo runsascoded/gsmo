@@ -130,7 +130,7 @@ def clone_and_run_module(
             if exception:
                 with open(FAILURE_PATH, 'w') as f:
                     f.write('1\n')
-                err.write(e)
+                err.write(exception)
 
                 status = 'failure'
                 files.append(FAILURE_PATH)
