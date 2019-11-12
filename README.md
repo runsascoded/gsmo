@@ -1,26 +1,97 @@
 # cron
-Runner for simple directory-based "modules", suitable for crontab, that tracks runs in git
-
-It's not necessarily a good idea to use this instead of e.g. Docker containers; the main thing it provides is a particular way of storing/tracking runs (and changes between runs) in `git`. It's also much lighter-weight than Docker (though more brittle as a result).
+Runner for simple directory-based "modules", suitable for calling from crontab, that tracks runs in git.
 
 ## "Modules"
 A "module" is a git repository containing a `run.sh` script that is designed to be run regularly / on an interval (e.g. in a user's `crontab`).
 
-### Example 
-Demonstrate single runs of the [test/echo_module](test/echo_module) example modules:
+Running a module consists of:
+ - mounting it into a Docker container (which can be customized by the module) under `/src`
+ - cloning that `/src` into a temporary directory in the container
+ - running the module's `run.sh` there.
+ 
+ The state of the working tree is then committed to `git` and pushed upstream to a `runs` subdirectory of the original module, allowing all changes (and output; stdout/stderr are written to `logs/{out,err}` paths) to be viewed/tracked in the upstream git repository. 
+
+### State
+Modules can optionally specify certain paths as "state"; changes to these paths are merged upstream into the module repo itself each run, and thus are available for subsequent runs of the module.
+
+If a file called `_STATE` is present in the top level of the module, it is interpreted as containing a list of paths that should be carried over from run to run.
+
+## Examples
+
+### [echo_module](test/echo_module)
+This module simply `echo`s test messages and a timestamp to stdout and stderr.
+
+To run, from this repo:
 
 ```bash
-python run_modules.py test/echo_module
+./run.sh test/echo_module
 ```
 
+The first time you runs this, a `runs/` subdirectory will be created under `test/echo_module`; `runs/` is itself a full clone of `test/echo_module`, but gets a commit for each run of the module:
+
+[![git graph output showing a "success" commit on the "runs" branch](https://p199.p4.n0.cdn.getcloudapp.com/items/nOuW16mK/Screen+Shot+2019-11-04+at+9.04.01+AM.png?v=b7a880e17055821f3073be25781575d6)](https://gist.github.com/ryan-williams/79d5833e6fedba060ba5a385cc4e511f)
+
+*(pretty formatting courtesy of [`git graph`](https://github.com/ryan-williams/git-helpers/blob/f45ab500ba3b0f195aca92e74716927a54d61931/graph/git-graph))*
+
+Inspecting the commit:
+
+```bash
+pushd test/echo_module/runs
+git checkout runs
+git show
+```
+
+[![git show output, showing a successful commit that adds logs/out, logs/err, and SUCCESS files](https://p199.p4.n0.cdn.getcloudapp.com/items/jkuyO2En/Screen+Shot+2019-11-04+at+9.10.58+AM.png?v=72733b3b3f91d7653e27d874ac410334)](https://gist.github.com/24c6470083e894a7dcd5ca2f38139df8)
+
+The `logs/` directory contains output from the run:
+
+```bash
+cat logs/out
+# yay; test stdout: Mon Nov  4 14:02:54 UTC 2019
+cat logs/err
+# test stderr: Mon Nov  4 14:02:54 UTC 2019
+```
+
+There is also an empty file named `SUCCESS` in the commit, denoting that the module's `run.sh` exited `0` (`FAILURE`, containing the non-zero exit-code, would be present otherwise).
+
+Running the module two more times adds further commits to the `runs` branch (in the `runs/` sub-clone of `test/echo_module`):
+
+```bash
+popd  # return to the root of this module
+./run.sh test/echo_module
+./run.sh test/echo_module
+```
+[![git graph output, showing 2 more successful runs after the first](https://p199.p4.n0.cdn.getcloudapp.com/items/7Kuxj4wO/Screen+Shot+2019-11-04+at+9.18.37+AM.png?v=790c8d5cd361abc92d75fc449b9698df)](https://gist.github.com/ryan-williams/8dcf3e4bec61d28d51d5336bb85d1200)
+
+The two new commits reflect changes in the stdout/stderr across runs (due to the runs' differing timestamps):
+
+[![git commit log -p output, showing two recent commits with updated timestamps in stdout/stderr](https://p199.p4.n0.cdn.getcloudapp.com/items/E0uPRGm8/Screen+Shot+2019-11-04+at+9.15.37+AM.png?v=75931988fce7449faa8968a2159a52f5)](https://gist.github.com/ryan-williams/42dfe6825d460705dea29e062722e491)
+
+Suppose we make a change to the module's source, to print the date before the other output:
+
+```bash
+cat <<EOF >test/echo_module/run.sh
+#!/usr/bin/env bash
+echo "\$(date +"%Y-%m-%d %H:%M:%S"): test stdout; yay!"
+echo "\$(date +"%Y-%m-%d %H:%M:%S"): test stderr; 🤷" >&2
+EOF
+git --git-dir=test/echo_module/.git commit -am "clean up output msgs"
+```
+
+If you navigate to `test/echo_module/runs` directory
+
+Each run will create a commit in a `runs/` subdirectory of the `test/echo_module` module; here's an example state of the `runs/` directory after a few runs:
 This will:
-- clone the module `test/echo_module` into a temporary directory
-- run its `run.sh` in that directory, capturing stdout and stderr
-- `git commit` the state of the directory after `run.sh` completes
-- apply that `commit` to the `runs/` directory in the original module path (`test/echo_module`)
-  - this directory is an additional clone of the containing module repo, used for storing the output of runs of that module
-  - each run's status and logs are appended to a branch that hangs off of the commit in the outer module repo that the run was run from
-  - for example, here's an example state of the `runs/` directory in the `test/echo_module` module:
+- build and run the `cron:latest` docker image ([defined in this repo](./Dockerfile)), with `test/echo_module` mounted as `/src`
+- the Docker entrypoint is [`run_module.py`](./src/run_module.py), which:
+  - clones the module (at `/src`) into a temporary directory (inside the container)
+  - runs the module's `run.sh` in that directory, directing stdout and stderr to `logs/{out/err}`
+  - `git commit`s the state of that directory after `run.sh` completes, picking up any changes to the module's files, output in the `logs/` dir, and paths explicitly labeled as `_STATE` (in this case, only the `logs` dir will have relevant new content)
+  - pushes that new commit to a `runs` branch in a `runs/` subdirectory of the module source repo
+    - this sub-repo is created if it doesn't already exist
+    - it is not a `git submodule` or subtree of the outer repo, but just an untracked directory there
+ 
+Here's an example state of the `runs/` directory in the `test/echo_module` module, after a few runs:
     ```bash
     git log --graph --decorate --color --oneline `git branch --list 'runs-*' | cut -c 3-`
     ```

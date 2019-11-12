@@ -1,5 +1,5 @@
 FROM python:3.7.4
-RUN pip3 install -U pip pytz
+RUN pip3 install -U papermill pip pytz
 RUN apt-get update
 RUN apt-get upgrade -y git
 RUN git config --global user.name 'cron'

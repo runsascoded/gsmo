@@ -2,7 +2,7 @@ from pathlib import Path
 
 FMT= '%Y-%m-%dT%H:%M:%S'
 
-RUN_SCRIPT = 'run.sh'
+RUN_SCRIPT_NAME = 'run'
 RUNS_DIR = 'runs'
 STATE_FILE = '_STATE'
 OUT_FILE = '_OUT'
@@ -19,5 +19,10 @@ LOGS_DIR = Path('logs')
 OUT_PATH = LOGS_DIR / 'out'
 ERR_PATH = LOGS_DIR / 'err'
 
+EARLY_EXIT_EXCEPTION_MSG_PREFIX = 'OK: '
+
 CRON_MODULE_RC = '.cron-module-rc'
 CRON_MODULE_RC_ENV = 'CRON_MODULE_RC'
+
+LOCK_TIMEOUT_DEFAULT_S = 600
+EXECUTION_TIMEOUT_DEFAULT_S = 600

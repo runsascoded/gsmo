@@ -22,7 +22,15 @@ def load_config_paths(file):
     return []
 
 
-def clone_and_run_module(path, dir=None, runs_path=None, upstream_branch=None, lock_timeout_s=600, keep_tmpdir=False):
+def clone_and_run_module(
+    path,
+    dir=None,
+    runs_path=None,
+    upstream_branch=None,
+    lock_timeout_s=LOCK_TIMEOUT_DEFAULT_S,
+    execution_timeout_s=EXECUTION_TIMEOUT_DEFAULT_S,
+    keep_tmpdir=False
+):
     if not dir:
         if keep_tmpdir:
             dir = TemporaryDirectory().name
@@ -72,10 +80,6 @@ def clone_and_run_module(path, dir=None, runs_path=None, upstream_branch=None, l
         state_paths = load_config_paths(STATE_FILE)
         out_paths = load_config_paths(OUT_FILE)
 
-        run_script = dir / RUN_SCRIPT
-        if not run_script.exists():
-            raise Exception('No runner script found at %s' % run_script)
-
         now = dt.now(utc)
         now_str = now.strftime(FMT)
 
@@ -84,22 +88,56 @@ def clone_and_run_module(path, dir=None, runs_path=None, upstream_branch=None, l
         files = [
             OUT_PATH,
             ERR_PATH,
-        ] + state_paths + out_paths
+        ] + \
+            state_paths + \
+            out_paths
 
-        cmd = [ str(run_script) ]
+        run_notebook_path = dir / ('%s.ipynb' % RUN_SCRIPT_NAME)
+        run_script_path = dir / ('%s.sh' % RUN_SCRIPT_NAME)
+        run_notebook = run_notebook_path.exists()
+        run_shell_script = run_script_path.exists()
+
+        exception = None
         with OUT_PATH.open('w') as out, ERR_PATH.open('w') as err:
-            print('Running: %s' % run_script)
-            try:
-                check_call(cmd, stdout=out, stderr=err)
-                with open(SUCCESS_PATH, 'w') as f:
-                    files.append(SUCCESS_PATH)
-                status = 'success'
-            except CalledProcessError as e:
+            if run_notebook and run_shell_script:
+                raise Exception('Found both %s and %s' % (run_notebook_path, run_script_path))
+            elif run_notebook:
+                from papermill import execute_notebook, PapermillExecutionError
+                print('Executing notebook %s in-place' % run_notebook_path)
+                try:
+                    execute_notebook(
+                        str(run_notebook_path),
+                        str(run_notebook_path),
+                        progress_bar=False,
+                        stdout_file=out,
+                        stderr_file=err,
+                    )
+                except PapermillExecutionError as e:
+                    if e.evalue.startswith(EARLY_EXIT_EXCEPTION_MSG_PREFIX):
+                        print('Run notebook %s exited with "OK" msg' % run_notebook_path)
+                    else:
+                        exception = e
+            elif run_shell_script:
+                cmd = [ str(run_script_path) ]
+                print('Running: %s' % run_script_path)
+                try:
+                    check_call(cmd, stdout=out, stderr=err)
+                except CalledProcessError as e:
+                    exception = e
+            else:
+                raise Exception('No runner script found at %s or %s' % (run_notebook_path, run_script_path))
+
+            if exception:
                 with open(FAILURE_PATH, 'w') as f:
-                    f.write('%d\n' % e.returncode)
+                    f.write('1\n')
+                err.write(e)
 
                 status = 'failure'
                 files.append(FAILURE_PATH)
+            else:
+                with open(SUCCESS_PATH, 'w') as f:
+                    files.append(SUCCESS_PATH)
+                status = 'success'
 
         if MSG_PATH.exists():
             with MSG_PATH.open('r') as f:
@@ -163,14 +201,17 @@ if __name__ == '__main__':
     add_argument('url', help='Module Git repo / directory to run')
     add_argument('dir', nargs='?', default=None, help='Local directory to clone into and work in')
     add_argument('runs_url', nargs='?', default=None, help='Local directory to additionally clone module into and record run in')
-    add_argument('-l', '--lock_timeout_s', default=600, required=False, help='Timeout (s) for locking git dirs being operated on')
-    add_argument('-u', '--upstream_branch', default=None, required=False, help='Override upstream branch to clone (default: master)')
+    add_argument('-e', '--execution_timeout_s', default=EXECUTION_TIMEOUT_DEFAULT_S, help='Timeout (in seconds) for executing a run script')
+    add_argument('-l', '--lock_timeout_s', default=LOCK_TIMEOUT_DEFAULT_S, help='Timeout (in seconds) for locking git dirs being operated on')
+    add_argument('-u', '--upstream_branch', default=None, help='Override upstream branch to clone (default: master)')
     add_argument('-k', '--keep_tmpdir', default=False, action='store_true', help="If working dir <dir> isn't provided, a temporary working dir will be created. When this flag is set, such a tmpdir will not be removed after the run completes (which can be useful for debugging)")
     args = parser.parse_args()
     clone_and_run_module(
         args.url,
         args.dir,
         args.runs_url,
+        lock_timeout_s=args.lock_timeout_s,
+        execution_timeout_s=args.execution_timeout_s,
         upstream_branch=args.upstream_branch,
         keep_tmpdir=args.keep_tmpdir
     )
