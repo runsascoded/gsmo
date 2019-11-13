@@ -1,3 +1,6 @@
 [submodule "test/echo"]
 	path = test/echo
 	url = git@github.com:ryan-williams/echo_module.git
+[submodule "test/hailstone"]
+	path = test/hailstone
+	url = git@github.com:ryan-williams/jupyter_module.git
