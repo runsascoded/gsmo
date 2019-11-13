@@ -19,15 +19,15 @@ If a file called `_STATE` is present in the top level of the module, it is inter
 ## Examples
 
 ### stateless `run.sh`
-[The `echo` module](test/echo) simply prints timestamped test messages to stdout and stderr.
+[The `echo` module](example/echo) simply prints timestamped test messages to stdout and stderr.
 
 To run it (from this repo's root):
 
 ```bash
-./run.sh test/echo
+./run.sh example/echo
 ```
 
-The first time you runs this, a `runs/` subdirectory will be created under `test/echo`; `runs/` is itself a full clone of `test/echo`, but gets a commit for each run of the module:
+The first time you runs this, a `runs/` subdirectory will be created under `example/echo`; `runs/` is itself a full clone of `example/echo`, but gets a commit for each run of the module:
 
 [![git graph output showing a "success" commit on the "runs" branch](https://p199.p4.n0.cdn.getcloudapp.com/items/nOuW16mK/Screen+Shot+2019-11-04+at+9.04.01+AM.png?v=b7a880e17055821f3073be25781575d6)](https://gist.github.com/ryan-williams/79d5833e6fedba060ba5a385cc4e511f)
 
@@ -36,7 +36,7 @@ The first time you runs this, a `runs/` subdirectory will be created under `test
 Inspecting the commit:
 
 ```bash
-pushd test/echo/runs
+pushd example/echo/runs
 git checkout runs
 git show
 ```
@@ -54,12 +54,12 @@ cat logs/err
 
 There is also an empty file named `SUCCESS` in the commit, denoting that the module's `run.sh` exited `0` (`FAILURE`, containing the non-zero exit-code, would be present otherwise).
 
-Running the module two more times adds further commits to the `runs` branch (in the `runs/` sub-clone of `test/echo`):
+Running the module two more times adds further commits to the `runs` branch (in the `runs/` sub-clone of `example/echo`):
 
 ```bash
 popd  # return to the root of this module
-./run.sh test/echo
-./run.sh test/echo
+./run.sh example/echo
+./run.sh example/echo
 ```
 [![git graph output, showing 2 more successful runs after the first](https://p199.p4.n0.cdn.getcloudapp.com/items/7Kuxj4wO/Screen+Shot+2019-11-04+at+9.18.37+AM.png?v=790c8d5cd361abc92d75fc449b9698df)](https://gist.github.com/ryan-williams/8dcf3e4bec61d28d51d5336bb85d1200)
 
@@ -72,7 +72,7 @@ The two new commits reflect changes in the stdout/stderr across runs (due to the
 Having run this module 3x, suppose we change its source to print the date before the other output:
 
 ```bash
-pushd test/echo
+pushd example/echo
 cat <<EOF >run.sh
 #!/usr/bin/env bash
 echo "\$(date +"%Y-%m-%d %H:%M:%S"): test stdout; yay!"
@@ -84,7 +84,7 @@ popd
 
 Running it again:
 ```bash
-./run.sh test/echo
+./run.sh example/echo
 ```
 
 …we see a new "successful run" commit in the `runs/` dir, with two parents: the previous run, and the upstream source change:
@@ -100,21 +100,21 @@ And it reflects the presence of the `logs/` directory and `SUCCESS` file when di
 [![git diff showing addition of logs dir and SUCCESS msg](https://gist.githubusercontent.com/ryan-williams/ecaf30b390bf9a9d39849b193befb9b6/raw/5d5df8577cf84b8b0922d5c055b820247f2ebc30/00.png)](https://gist.github.com/ryan-williams/ecaf30b390bf9a9d39849b193befb9b6)
 
 ### stateful, Jupyter-notebook-based module
-[The `hailstone` module](test/hailstone) demonstrates propagating state between runs as well as defining a module in a [Jupyter](https://jupyter.org/) notebook.
+[The `hailstone` module](example/hailstone) demonstrates propagating state between runs as well as defining a module in a [Jupyter](https://jupyter.org/) notebook.
 
-[Its `run.ipynb` notebook](./test/hailstone/run.ipynb) documents itself, and is worth a read.
+[Its `run.ipynb` notebook](./example/hailstone/run.ipynb) documents itself, and is worth a read.
 
 Running it from the root of this repo:
 
 ```bash
-./run.sh test/hailstone
+./run.sh example/hailstone
 ```
 
-We see not only a "run" commit under `test/hailstone/runs/`:
+We see not only a "run" commit under `example/hailstone/runs/`:
 
 [![git graph showing initial commit and child "run" commit](https://gist.githubusercontent.com/ryan-williams/124eb0a11eb67affaf9ff88b8c1a4775/raw/aafb7c7982974aa7a546aa13a60110f81619f4c6/00.png)](https://gist.github.com/ryan-williams/124eb0a11eb67affaf9ff88b8c1a4775)
 
-but also a merge of that "run" into the containing module, `test/hailstone`:
+but also a merge of that "run" into the containing module, `example/hailstone`:
 
 [![graph showing initial commit, run commit, and "update state" merge of both](https://gist.githubusercontent.com/ryan-williams/14c5d01b240e3520ab6757883d6fa620/raw/14cdfb9251b3580fec9ad6e41c83d1262544ad7d/00.png)](https://gist.github.com/ryan-williams/14c5d01b240e3520ab6757883d6fa620)
 
@@ -122,7 +122,7 @@ Running several more times:
 
 ```bash
 for _ in `seq 8`; do
-    ./run.sh test/hailstone
+    ./run.sh example/hailstone
 done
 ```
 
@@ -136,4 +136,4 @@ Note that there are only 8 hailstone iterations represented, though we've trigge
 
 We can inspect the `run.ipynb` notebook from that most recent commit, and see that it detected that the value was already `1`, and raised an `Exception` beginning with `OK: `, which tells the runner machinery that it exited early but successfully:
 
-![Screenshot of cells 2 and 3 of test/hailstone/run.ipynb Jupyter notebook, showing a thrown Exception and early termination of the notebook](https://p199.p4.n0.cdn.getcloudapp.com/items/JruwZ0KX/Screen+Shot+2019-11-12+at+9.44.56+PM.png?v=beed774d346ee753fd237baf9f3a0940)
+![Screenshot of cells 2 and 3 of example/hailstone/run.ipynb Jupyter notebook, showing a thrown Exception and early termination of the notebook](https://p199.p4.n0.cdn.getcloudapp.com/items/JruwZ0KX/Screen+Shot+2019-11-12+at+9.44.56+PM.png?v=beed774d346ee753fd237baf9f3a0940)
