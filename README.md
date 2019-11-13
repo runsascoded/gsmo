@@ -124,7 +124,7 @@ Running several more times:
 for _ in `seq 8`; do
     ./run.sh test/hailstone
 done
-``` 
+```
 
 We see a series of "run" commits (with custom messages describing updates to the "value" state), and a merge into the containing repo of each change:
 
