@@ -10,10 +10,8 @@ fi
 module="$1"
 shift
 
-before_first_slash="${module%%/}"
-if [ ! -z "$before_first_slash" ]; then
-  module="$PWD/$module"
-fi
+# canonicalize module path
+module="$(cd "$module" && pwd)"
 
 dir="$(dirname "${BASH_SOURCE[0]}")"
 cd "$dir"
