@@ -9,9 +9,9 @@ def run(args):
     check_call(args)
 
 
-def success(*args):
+def success(*args, stdout=DEVNULL, stderr=DEVNULL):
     try:
-        check_call(args, stdout=DEVNULL, stderr=DEVNULL)
+        check_call(args, stdout=stdout, stderr=stderr)
         return True
     except CalledProcessError:
         return False

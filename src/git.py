@@ -1,6 +1,6 @@
 
 from pathlib import Path
-from run import line, run, success
+from process import line, run, success
 from subprocess import CalledProcessError, check_output, DEVNULL
 
 def sha(*args, missing_ok=False):

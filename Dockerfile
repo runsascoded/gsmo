@@ -1,12 +1,13 @@
 FROM python:3.7.4
 
-RUN pip3 install -U jupyter papermill pip pytz
+RUN pip3 install -U \
+    jupyter papermill \
+    pip \
+    python-dateutil pytz
 RUN python -m ipykernel install --name 3.7.4
 
 RUN apt-get update
 RUN apt-get upgrade -y git
-RUN git config --global user.name 'cron'
-RUN git config --global user.email 'cron@cron.com'
 
 ADD src /cron
 
