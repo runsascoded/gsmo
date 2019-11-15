@@ -196,8 +196,6 @@ def make_run_commit(config):
 
 
 def run_module(module):
-    if not module:
-        module = Path.cwd()
     module = Path(module).absolute().resolve()
 
     with cd(module):
@@ -253,5 +251,8 @@ if __name__ == '__main__':
     args, docker_args = parser.parse_known_args()
 
     modules = args.modules
+    if modules is None:
+        modules = [ Path.cwd() ]
+
     for module in modules:
         run_module(module)
