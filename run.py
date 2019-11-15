@@ -119,7 +119,7 @@ def make_cmd(config, dir):
         raise Exception('Found "docker.mount" and "docker.mounts" keys: (%s, %s)' % (mount, mounts))
 
     if mount:
-        mounts = [ mount ]
+        mounts = mount
 
     mounts = [
          mount
@@ -249,8 +249,9 @@ def run_module(module):
 
 if __name__ == '__main__':
     parser = ArgumentParser()
-    parser.add_argument('module', nargs='?', default=None, help='Path to module to run')
+    parser.add_argument('modules', nargs='+', default=None, help='Path to module to run')
     args, docker_args = parser.parse_known_args()
 
-    module = args.module
-    run_module(module)
+    modules = args.modules
+    for module in modules:
+        run_module(module)
