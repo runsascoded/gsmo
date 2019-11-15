@@ -138,7 +138,12 @@ def add(files, *args):
             missing_paths.append(str(path))
 
     if missing_paths:
-        print('Skipping adding non-existent paths:\n%s' % '\n\t'.join(missing_paths))
+        if len(missing_paths) == 1:
+            paths_str = ' %s' % missing_paths[0]
+        else:
+            paths_str = '\n\t'.join([''] + missing_paths)
+
+        print('Skipping adding non-existent paths:%s' % paths_str)
 
     if paths:
         run([ 'git', 'add' ] + list(args) + [ '--' ] + paths)
