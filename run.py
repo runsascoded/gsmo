@@ -66,7 +66,7 @@ def clean_mount(mount):
     pieces = mount.split(':')
     if len(pieces) == 1:
         src = pieces[0]
-        dest = Path(src).name
+        dest = '/%s' % Path(src).name
         pieces = [ src, dest ]
 
     if len(pieces) != 2:
