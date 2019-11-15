@@ -73,8 +73,11 @@ def clean_mount(mount):
         raise Exception('Invalid mount spec: %s' % mount)
 
     [ src, dest ] = pieces
-    src = Path(src).absolute().resolve()
-    return '%s:%s' % (src, dest)
+    from os.path import expanduser, expandvars
+    def expand(s):
+        return expandvars(expanduser(s))
+    src = Path(expand(src)).absolute().resolve()
+    return '%s:%s' % (src, expand(dest))
 
 
 def clean_group(group):
