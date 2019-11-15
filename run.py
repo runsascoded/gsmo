@@ -79,9 +79,9 @@ def clean_mount(mount):
 
 def clean_group(group):
     if group.index('/') >= 0:
-        return output([ 'stat', '-c', '%g', group ])
+        return output([ 'stat', '-c', '%g', group ]).strip()
     else:
-        return output([ 'id', '-g', group ])
+        return output([ 'id', '-g', group ]).strip()
 
 
 def load_config():
