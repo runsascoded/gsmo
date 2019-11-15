@@ -249,7 +249,7 @@ def run_module(module):
 
 if __name__ == '__main__':
     parser = ArgumentParser()
-    parser.add_argument('modules', nargs='+', default=None, help='Path to module to run')
+    parser.add_argument('modules', nargs='*', default=None, help='Path to module to run')
     args, docker_args = parser.parse_known_args()
 
     modules = args.modules
