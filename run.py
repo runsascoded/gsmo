@@ -2,6 +2,7 @@
 
 from argparse import ArgumentParser
 from configparser import ConfigParser
+from datetime import datetime as dt
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from sys import path
@@ -13,6 +14,10 @@ from config import *
 from src import git
 from merge_results import merge_results
 from process import output, run
+
+
+now = dt.now()
+now_str = now.strftime(FMT)
 
 
 def write_git_config(config):
@@ -170,10 +175,6 @@ def make_run_commit(config):
             msg = f.read()
         MSG_PATH.unlink()
     else:
-        from datetime import datetime as dt
-        now = dt.now()
-        now_str = now.strftime(FMT)
-
         msg = '%s: %s' % (now_str, status)
 
     state_paths = strs(config, 'state')
@@ -200,52 +201,68 @@ def make_run_commit(config):
 
 def run_module(module):
     module = Path(module).absolute().resolve()
+    runs_path = get_runs_clone(module)
 
-    with cd(module):
+    runner_logs_dir = runs_path / LOGS_DIR / RUNNER_LOGS_DIR / now_str
+    runner_logs_dir.mkdir(parents=True)
+    stdout_path = runner_logs_dir / RUNNER_STDOUT_BASENAME
+    stderr_path = runner_logs_dir / RUNNER_STDERR_BASENAME
 
-        config = load_config()
-        runs_path = get_runs_clone(module)
+    print('Redirecting stdout/stderr to %s, %s' % (stdout_path, stderr_path))
+    import sys
+    original_stdout = sys.stdout
+    original_stderr = sys.stderr
+    sys.stdout = stdout_path.open('w')
+    sys.stderr = stderr_path.open('w')
 
-        # from contextlib import nullcontext
-        # dir = TemporaryDirectory(prefix='gismo_')
-        # with nullcontext():
-        #     dir = Path(dir.name)
+    try:
         with TemporaryDirectory(prefix='gismo_') as dir:
             dir = Path(dir)
-            cmd = make_cmd(config, dir)
-            run([ 'git', 'clone', module, dir ])
-            with cd(dir):
 
-                remote = git.remote()
+            with cd(module):
 
-                # if not upstream_branch:
-                upstream_branch = DEFAULT_UPSTREAM_BRANCH
-                upstream_remote_branch = '%s/%s' % (remote, upstream_branch)
+                config = load_config()
+                cmd = make_cmd(config, dir)
 
-                original_upstream_sha = git.sha(upstream_remote_branch)
-                print('Working from upstream branch %s (%s)' % (upstream_remote_branch, original_upstream_sha))
+                run([ 'git', 'clone', module, dir ])
+                with cd(dir):
 
-                base_sha = git.sha()
-                if original_upstream_sha != base_sha:
-                    print('Overriding cloned HEAD %s to start from upstream %s (%s)' % (base_sha, upstream_remote_branch, original_upstream_sha))
-                    git.checkout(upstream_remote_branch)
-                    base_sha = original_upstream_sha
+                    remote = git.remote()
 
-                run(cmd)
+                    # if not upstream_branch:
+                    upstream_branch = DEFAULT_UPSTREAM_BRANCH
+                    upstream_remote_branch = '%s/%s' % (remote, upstream_branch)
 
-                run_sha, msg = make_run_commit(config)
+                    original_upstream_sha = git.sha(upstream_remote_branch)
+                    print('Working from upstream branch %s (%s)' % (upstream_remote_branch, original_upstream_sha))
 
-                merge_results(
-                    module,
-                    runs_path,
-                    config,
-                    base_sha,
-                    run_sha,
-                    msg,
-                    original_upstream_sha,
-                    remote,
-                    upstream_branch,
-                )
+                    base_sha = git.sha()
+                    if original_upstream_sha != base_sha:
+                        print('Overriding cloned HEAD %s to start from upstream %s (%s)' % (base_sha, upstream_remote_branch, original_upstream_sha))
+                        git.checkout(upstream_remote_branch)
+                        base_sha = original_upstream_sha
+
+                    run(cmd)
+
+                    run_sha, msg = make_run_commit(config)
+
+                    merge_results(
+                        module,
+                        runs_path,
+                        config,
+                        base_sha,
+                        run_sha,
+                        msg,
+                        original_upstream_sha,
+                        remote,
+                        upstream_branch,
+                    )
+    finally:
+        print('Restoring stdout, stderr')
+        sys.stdout.close()
+        sys.stderr.close()
+        sys.stdout = original_stdout
+        sys.stderr = original_stderr
 
 
 if __name__ == '__main__':

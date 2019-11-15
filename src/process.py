@@ -1,12 +1,13 @@
 
 from subprocess import check_call, check_output, CalledProcessError, DEVNULL
+import sys
 
 
 def run(args):
     """Print a command before running it (converting all args to strs as well; useful for Paths in particular)"""
     args = [ str(arg) for arg in args ]
     print('Running: %s' % ' '.join(args))
-    check_call(args)
+    check_call(args, stdout=sys.stdout, stderr=sys.stderr)
 
 
 def success(*args, stdout=DEVNULL, stderr=DEVNULL):
