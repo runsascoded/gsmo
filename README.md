@@ -4,17 +4,30 @@ Directory-based "module" system that tracks module-runs in Git.
 ## "Modules"
 A *module* is a Git repository containing a `run.sh` script (or `run.ipynb` notebook) that is designed to be run regularly / on an interval (e.g. in a user's `crontab`), or as part of pipelines of *modules*.
 
+### Running modules
 This library runs a module by:
- - mounting it into a Docker container (which can be customized by the module) under `/src`
- - cloning that `/src` into a temporary directory in the container
- - running the module's `run.{sh,ipynb}` there.
- 
- The state of the working tree is then committed to `git` and pushed upstream to a `runs` subdirectory of the original module, allowing all changes (and output; stdout/stderr are written to `logs/{out,err}`) to be viewed/tracked in the upstream git repository. 
+- git-cloning it into a temporary directory
+- mounting that directory into a Docker container (which can be customized by the module)
+- running the module's "run script" (`run.ipynb` or `run.sh`) there (and recording stdout/stderr in the `logs/` directory)
+- git-committing the post-run state of this temporary module clone (i.e. any changes to the module's files, as well as the `logs/` dir)
+- merging that commit upstream to a dedicated "runs" clone of the module (typically placed under `runs/` in the module itself, and left untracked by the module's git repository)
+- optionally merging changes to specific files into the module's git repository itself, so that subsequent runs will build off of those changes 
 
-### State
-Modules can optionally specify certain paths as "state"; changes to these paths are merged upstream into the module repo itself each run, and thus are available for subsequent runs of the module.
+### Configuring modules
+A `config.yaml` allows for configuring how the module is run, state is tracked across runs, etc.
 
-If a file called `_STATE` is present in the top level of the module, it is interpreted as containing a list of paths that should be carried over from run to run.
+Notable fields:
+- `name` (required): name of the module (also used in `user.name` and `user.email` git configs)
+- `state`: path (or list of paths) to merge upstream after each run (if any changes to them have occurred), for use in subsequent runs
+- `docker`: configs for the Docker container that the module is run in:
+    - `as_user`: run the Docker container as the current user
+    - `add_groups`: group(s) to additionally make the Docker-container user be a member of
+    - `pip`: `pip` packages to install
+    - `apt`: `apt` packages to install
+    - `mount`/`mounts`: directories to mount into the docker container
+        - relative paths allowed (will be resolved before passing to Docker)
+        - `<src>` will be mapped to `<src>:<basename <src>>`, for convenience
+        - by default, the module is mounted under `/src`, and this module is under `/gismo`
 
 ## Examples
 
@@ -24,7 +37,7 @@ If a file called `_STATE` is present in the top level of the module, it is inter
 To run it (from this repo's root):
 
 ```bash
-./run.sh example/echo
+./run.py example/echo
 ```
 
 The first time you runs this, a `runs/` subdirectory will be created under `example/echo`; `runs/` is itself a full clone of `example/echo`, but gets a commit for each run of the module:
@@ -58,8 +71,8 @@ Running the module two more times adds further commits to the `runs` branch (in 
 
 ```bash
 popd  # return to the root of this module
-./run.sh example/echo
-./run.sh example/echo
+./run.py example/echo
+./run.py example/echo
 ```
 [![git graph output, showing 2 more successful runs after the first](https://p199.p4.n0.cdn.getcloudapp.com/items/7Kuxj4wO/Screen+Shot+2019-11-04+at+9.18.37+AM.png?v=790c8d5cd361abc92d75fc449b9698df)](https://gist.github.com/ryan-williams/8dcf3e4bec61d28d51d5336bb85d1200)
 
@@ -84,7 +97,7 @@ popd
 
 Running it again:
 ```bash
-./run.sh example/echo
+./run.py example/echo
 ```
 
 …we see a new "successful run" commit in the `runs/` dir, with two parents: the previous run, and the upstream source change:
@@ -107,7 +120,7 @@ And it reflects the presence of the `logs/` directory and `SUCCESS` file when di
 Running it from the root of this repo:
 
 ```bash
-./run.sh example/hailstone
+./run.py example/hailstone
 ```
 
 We see not only a "run" commit under `example/hailstone/runs/`:
@@ -122,7 +135,7 @@ Running several more times:
 
 ```bash
 for _ in `seq 8`; do
-    ./run.sh example/hailstone
+    ./run.py example/hailstone
 done
 ```
 
