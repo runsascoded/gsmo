@@ -24,6 +24,9 @@ RUNNER_LOGS_DIR = Path('runner')
 RUNNER_STDOUT_BASENAME = 'out'
 RUNNER_STDERR_BASENAME = 'err'
 
+DOCKERFILE_PATH = 'Dockerfile'
+GIT_CONFIG_PATH = Path('conf') / '.gitconfig'
+
 EARLY_EXIT_EXCEPTION_MSG_PREFIX = 'OK: '
 
 CRON_MODULE_RC = '.cron-module-rc'

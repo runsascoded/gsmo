@@ -8,13 +8,14 @@ def strs(config, *keys):
     return []
 
 
-def get(config, *keys):
+def get(config, *keys, default=None):
     keys = list(keys)
     if keys:
         key = keys.pop(0)
-        if not key in config:
-            return []
+        if not config or not key in config:
+            return default
         return get(config[key], *keys)
+
     return config
 
 

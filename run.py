@@ -4,7 +4,7 @@ from argparse import ArgumentParser
 from configparser import ConfigParser
 from datetime import datetime as dt
 from pathlib import Path
-from tempfile import TemporaryDirectory
+from tempfile import NamedTemporaryFile, TemporaryDirectory
 from sys import path
 path += [ str(Path(__file__).parent / 'src') ]
 
@@ -37,19 +37,35 @@ def write_git_config(config):
         for k,v in section.items():
             config[name][k] = v
 
-    conf_dir = Path('conf')
-    conf_dir.mkdir(exist_ok=True)
-    git_config_path = conf_dir / '.gitconfig'
+    git_config_path = Path(NamedTemporaryFile(prefix='.gitconfig', suffix='').name)
     with git_config_path.open('w') as f:
         config.write(f)
 
     return git_config_path
 
 
+def get_image(config):
+    gismo = get(config, 'gismo')
+    if type(gismo) is object:
+        base = get(gismo, 'base', default='gismo')
+        version = get(gismo, 'version', default='latest')
+    else:
+        base = 'gismo'
+        if type(gismo) is str or type(gismo) is float or type(gismo) is int:
+            version = str(gismo)
+        elif gismo is None:
+            version = 'latest'
+        else:
+            raise Exception('Unrecognized base-image value: %s' % gismo)
+
+    return '%s:%s' % (base, version)
+
+
 def build_dockerfile(config):
     git_config_path = write_git_config(config)
     lines = []
-    lines.append('FROM cron:latest')
+    img = get_image(config)
+    lines.append('FROM %s' % img)
     if 'docker' in config:
         docker = config['docker']
         pip = strs(docker, 'pip')
@@ -59,12 +75,12 @@ def build_dockerfile(config):
         if apt:
             lines.append(' '.join([ 'RUN', 'apt-get', 'install', '-y', ] + apt))
 
-    lines.append('ADD %s /.gitconfig' % git_config_path)
-    dockerfile = Path('Dockerfile')
+    lines.append('ADD %s /.gitconfig' % GIT_CONFIG_PATH)
+    dockerfile = Path(NamedTemporaryFile(prefix='Dockerfile_').name)
     with dockerfile.open('w') as f:
         f.write('\n'.join(lines + ['']))
 
-    return dockerfile
+    return dockerfile, git_config_path
 
 
 def clean_mount(mount):
@@ -105,9 +121,7 @@ def load_config():
 
 def make_cmd(config, dir):
     name = get_name(config)
-    dockerfile = build_dockerfile(config)
-
-    run([ 'docker', 'build', '-t', name, '-f', dockerfile, '.' ])
+    dockerfile, git_config_path = build_dockerfile(config)
 
     docker = get(config, 'docker')
 
@@ -144,7 +158,7 @@ def make_cmd(config, dir):
         + docker_args \
         + [ name, '-n', name ]
 
-    return cmd
+    return dockerfile, git_config_path, cmd
 
 
 def get_runs_clone(module):
@@ -183,6 +197,8 @@ def make_run_commit(config):
     files = [
         OUT_PATH,
         ERR_PATH,
+        DOCKERFILE_PATH,
+        GIT_CONFIG_PATH,
         success_path,
         failure_path,
     ] \
@@ -222,11 +238,21 @@ def run_module(module):
             with cd(module):
 
                 config = load_config()
-                cmd = make_cmd(config, dir)
-
+                name = get_name(config)
+                dockerfile_src, git_config_src, cmd = make_cmd(config, dir)
                 run([ 'git', 'clone', module, dir ])
-                with cd(dir):
 
+                dockerfile = dir / DOCKERFILE_PATH
+                print('Installing Dockerfile %s in temporary clone: %s' % (dockerfile_src, dockerfile))
+                dockerfile_src.rename(dockerfile)
+
+                git_config_dest = dir / GIT_CONFIG_PATH
+                print('Installing git config %s in temporary clone: %s' % (git_config_src, git_config_dest))
+                git_config_dest.parent.mkdir(exist_ok=True, parents=True)
+                git_config_src.rename(git_config_dest)
+
+                with cd(dir):
+                    run([ 'docker', 'build', '-t', name, '-f', dockerfile, '.' ])
                     remote = git.remote()
 
                     # if not upstream_branch:

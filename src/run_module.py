@@ -1,14 +1,30 @@
 
 from argparse import ArgumentParser
+from shutil import copy
 from subprocess import check_call, CalledProcessError
 
 from cd import cd
 from conf import *
+from git import success
 
 
-def clone_and_run_module(name, dir):
+def run_module(name, dir):
     dir = Path(dir).absolute().resolve()
     with cd(dir):
+
+        if not success('git', 'config', '--global', 'user.name'):
+            global_git_config_template = Path('/.gitconfig')
+            global_git_config_path = Path.home() / '.gitconfig'
+            copy(str(global_git_config_template), str(global_git_config_path))
+            if not success('git', 'config', '--global', 'user.name') or \
+               not success('git', 'config', '--global', 'user.email'):
+                with global_git_config_template.open('r') as f:
+                    config_str = f.read()
+                raise Exception("Failed to set user.name / user.email global git configs via %s or %s:\n%s" % (
+                    global_git_config_template,
+                    global_git_config_path,
+                    config_str
+                ))
 
         LOGS_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -57,13 +73,14 @@ def clone_and_run_module(name, dir):
 
     print('Module finished: %s' % name)
 
+
 if __name__ == '__main__':
     parser = ArgumentParser()
     add_argument = parser.add_argument
     add_argument('dir', nargs='?', default=None, help='Local directory to clone into and work in')
     add_argument('-n', '--name', help='Module name')
     args = parser.parse_args()
-    clone_and_run_module(
+    run_module(
         args.name,
         args.dir,
     )

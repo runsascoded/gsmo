@@ -5,16 +5,16 @@ from pathlib import Path
 from tempfile import mkdtemp, TemporaryDirectory
 
 from conf import CRON_MODULE_RC_ENV, CRON_MODULE_RC
-from run_module import clone_and_run_module
+from run_module import run_module
 
 
 def run_module(url, preserve_tmp_clones, runs_url=None):
     if preserve_tmp_clones:
         dir = mkdtemp()
-        clone_and_run_module(url, dir, runs_url)
+        run_module(url, dir, runs_url)
     else:
         with TemporaryDirectory() as dir:
-            clone_and_run_module(url, dir, runs_url)
+            run_module(url, dir, runs_url)
 
 
 def load_modules():
