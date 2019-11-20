@@ -4,6 +4,7 @@ from argparse import ArgumentParser
 from datetime import datetime as dt
 from pathlib import Path
 from tempfile import NamedTemporaryFile, TemporaryDirectory
+import sys
 from sys import path
 path += [ str(Path(__file__).parent / 'src') ]
 
@@ -201,25 +202,37 @@ def make_run_commit(config):
     return run_sha, msg
 
 
-def run_module(module):
+def run_module(
+    module,
+    preserve_tmp_clones=False,
+    capture_output=True,
+):
     module = Path(module).absolute().resolve()
     runs_path = get_runs_clone(module)
 
-    runner_logs_dir = runs_path / LOGS_DIR / RUNNER_LOGS_DIR / now_str
-    runner_logs_dir.mkdir(parents=True)
-    stdout_path = runner_logs_dir / RUNNER_STDOUT_BASENAME
-    stderr_path = runner_logs_dir / RUNNER_STDERR_BASENAME
+    if capture_output:
+        runner_logs_dir = runs_path / LOGS_DIR / RUNNER_LOGS_DIR / now_str
+        runner_logs_dir.mkdir(parents=True)
+        stdout_path = runner_logs_dir / RUNNER_STDOUT_BASENAME
+        stderr_path = runner_logs_dir / RUNNER_STDERR_BASENAME
 
-    print('Redirecting stdout/stderr to %s, %s' % (stdout_path, stderr_path))
-    import sys
-    original_stdout = sys.stdout
-    original_stderr = sys.stderr
-    sys.stdout = stdout_path.open('w')
-    sys.stderr = stderr_path.open('w')
+        print('Redirecting stdout/stderr to %s, %s' % (stdout_path, stderr_path))
+        original_stdout = sys.stdout
+        original_stderr = sys.stderr
+        sys.stdout = stdout_path.open('w')
+        sys.stderr = stderr_path.open('w')
 
     try:
-        with TemporaryDirectory(prefix='gismo_') as dir:
-            dir = Path(dir)
+        dir = TemporaryDirectory(prefix='gismo_')
+
+        if preserve_tmp_clones:
+            from contextlib import nullcontext
+            ctx = nullcontext()
+        else:
+            ctx = dir
+
+        with ctx:
+            dir = Path(dir.name)
 
             with cd(module):
 
@@ -267,15 +280,18 @@ def run_module(module):
                         upstream_branch,
                     )
     finally:
-        print('Restoring stdout, stderr')
-        sys.stdout.close()
-        sys.stderr.close()
-        sys.stdout = original_stdout
-        sys.stderr = original_stderr
+        if capture_output:
+            print('Restoring stdout, stderr')
+            sys.stdout.close()
+            sys.stderr.close()
+            sys.stdout = original_stdout
+            sys.stderr = original_stderr
 
 
 if __name__ == '__main__':
     parser = ArgumentParser()
+    parser.add_argument('--preserve_tmp_clones', '-p', default=False, action='store_true', help="When true, don't clean up the temporary clones of modules that are run (useful for debugging)")
+    parser.add_argument('--pipe_output', '-o', default=False, action='store_true', help="When true, pipe runner stdout/stderr through to the current terminal (by default, they're logged under runs/logs/runner")
     parser.add_argument('modules', nargs='*', help='Path to module to run')
     args, docker_args = parser.parse_known_args()
 
@@ -283,5 +299,8 @@ if __name__ == '__main__':
     if not modules:
         modules = [ Path.cwd() ]
 
+    preserve_tmp_clones = args.preserve_tmp_clones
+    pipe_output = args.pipe_output
+
     for module in modules:
-        run_module(module)
+        run_module(module, preserve_tmp_clones=preserve_tmp_clones, capture_output=not pipe_output)
