@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 
 from argparse import ArgumentParser
-from configparser import ConfigParser
 from datetime import datetime as dt
 from pathlib import Path
 from tempfile import NamedTemporaryFile, TemporaryDirectory
@@ -11,38 +10,13 @@ path += [ str(Path(__file__).parent / 'src') ]
 from cd import cd
 from conf import *
 from config import *
-from git import success
-from src import git
 from merge_results import merge_results
-from process import output, run
+from process import output, run, success
+from src import git
 
 
 now = dt.now()
 now_str = now.strftime(FMT)
-
-
-def write_git_config(config):
-    name = get_name(config)
-    if 'git' in config:
-        git = config['git']
-    else:
-        git = {
-            'user': {
-                'name': name,
-                'email': '%s@%s' % (name, name)
-            }
-        }
-    config = ConfigParser()
-    for name, section in git.items():
-        config[name] = {}
-        for k,v in section.items():
-            config[name][k] = v
-
-    git_config_path = Path(NamedTemporaryFile(prefix='.gitconfig', suffix='').name)
-    with git_config_path.open('w') as f:
-        config.write(f)
-
-    return git_config_path
 
 
 def get_image(config):
@@ -63,7 +37,6 @@ def get_image(config):
 
 
 def build_dockerfile(config):
-    git_config_path = write_git_config(config)
     lines = []
     img = get_image(config)
     lines.append('FROM %s' % img)
@@ -76,12 +49,11 @@ def build_dockerfile(config):
         if apt:
             lines.append(' '.join([ 'RUN', 'apt-get', 'install', '-y', ] + apt))
 
-    lines.append('ADD %s /.gitconfig' % GIT_CONFIG_PATH)
     dockerfile = Path(NamedTemporaryFile(prefix='Dockerfile_').name)
     with dockerfile.open('w') as f:
         f.write('\n'.join(lines + ['']))
 
-    return dockerfile, git_config_path
+    return dockerfile
 
 
 def clean_mount(mount):
@@ -122,7 +94,7 @@ def load_config():
 
 def make_cmd(config, dir):
     name = get_name(config)
-    dockerfile, git_config_path = build_dockerfile(config)
+    dockerfile = build_dockerfile(config)
 
     docker = get(config, 'docker')
 
@@ -152,12 +124,6 @@ def make_cmd(config, dir):
         '%s:/src' % dir,
     ]
 
-    if as_user:
-        user = output(['whoami']).strip()
-        mounts += [
-            '%s:/home/%s/.gitconfig' % (dir / GIT_CONFIG_PATH, user),
-        ]
-
     mount_args = [ arg for mount in mounts for arg in [ '-v', clean_mount(mount) ] ]
 
     cmd = \
@@ -168,7 +134,7 @@ def make_cmd(config, dir):
         + docker_args \
         + [ name, '-n', name ]
 
-    return dockerfile, git_config_path, cmd
+    return dockerfile, cmd
 
 
 def get_runs_clone(module):
@@ -208,7 +174,6 @@ def make_run_commit(config):
         OUT_PATH,
         ERR_PATH,
         DOCKERFILE_PATH,
-        GIT_CONFIG_PATH,
         success_path,
         failure_path,
     ] \
@@ -217,13 +182,8 @@ def make_run_commit(config):
 
     git.add(files)
 
-    if not success('git', 'config', 'user.name'):
-        name = get_name(config)
-        run([ 'git', 'config', 'user.name', name ])
-
-    if not success('git', 'config', 'user.email'):
-        name = get_name(config)
-        run([ 'git', 'config', 'user.email', '%s@%s' % (name, name) ])
+    name = get_name(config)
+    git.set_user_configs(name)
 
     # "-q" is necessary when committing files >1GB; https://public-inbox.org/git/xmqqsha3o4u7.fsf@gitster-ct.c.googlers.com/t/
     run([ 'git', 'commit', '-a', '-q', '--allow-empty', '-m', msg ])
@@ -257,17 +217,14 @@ def run_module(module):
 
                 config = load_config()
                 name = get_name(config)
-                dockerfile_src, git_config_src, cmd = make_cmd(config, dir)
+                dockerfile_src, cmd = make_cmd(config, dir)
                 run([ 'git', 'clone', module, dir ])
 
                 dockerfile = dir / DOCKERFILE_PATH
                 print('Installing Dockerfile %s in temporary clone: %s' % (dockerfile_src, dockerfile))
                 dockerfile_src.rename(dockerfile)
 
-                git_config_dest = dir / GIT_CONFIG_PATH
-                print('Installing git config %s in temporary clone: %s' % (git_config_src, git_config_dest))
-                git_config_dest.parent.mkdir(exist_ok=True, parents=True)
-                git_config_src.rename(git_config_dest)
+                git.set_user_configs(name)
 
                 with cd(dir):
                     run([ 'docker', 'build', '-t', name, '-f', dockerfile, '.' ])

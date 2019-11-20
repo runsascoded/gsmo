@@ -5,26 +5,14 @@ from subprocess import check_call, CalledProcessError
 
 from cd import cd
 from conf import *
-from git import success
+from git import set_user_configs
 
 
 def run_module(name, dir):
     dir = Path(dir).absolute().resolve()
     with cd(dir):
 
-        if not success('git', 'config', '--global', 'user.name'):
-            global_git_config_template = Path('/.gitconfig')
-            global_git_config_path = Path.home() / '.gitconfig'
-            copy(str(global_git_config_template), str(global_git_config_path))
-            if not success('git', 'config', '--global', 'user.name') or \
-               not success('git', 'config', '--global', 'user.email'):
-                with global_git_config_template.open('r') as f:
-                    config_str = f.read()
-                raise Exception("Failed to set user.name / user.email global git configs via %s or %s:\n%s" % (
-                    global_git_config_template,
-                    global_git_config_path,
-                    config_str
-                ))
+        set_user_configs(name)
 
         LOGS_DIR.mkdir(parents=True, exist_ok=True)
 

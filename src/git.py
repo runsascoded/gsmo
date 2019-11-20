@@ -147,3 +147,11 @@ def add(files, *args):
 
     if paths:
         run([ 'git', 'add' ] + list(args) + [ '--' ] + paths)
+
+
+def set_user_configs(name):
+    if not success('git', 'config', 'user.name'):
+        run([ 'git', 'config', 'user.name', name ])
+
+    if not success('git', 'config', 'user.email'):
+        run([ 'git', 'config', 'user.email', '%s@%s' % (name, name) ])
