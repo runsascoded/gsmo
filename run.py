@@ -126,7 +126,8 @@ def make_cmd(config, dir):
     docker = get(config, 'docker')
 
     user_args = []
-    if get(docker, 'as_user'):
+    as_user = get(docker, 'as_user')
+    if as_user:
         uid = int(output([ 'id', '-u' ]).strip())
         gid = int(output([ 'id', '-g' ]).strip())
         user_args = [ '-u', '%d:%d' % (uid, gid) ]
@@ -146,7 +147,15 @@ def make_cmd(config, dir):
     mounts = [
          mount
          for mount in mounts
-     ] + [ '%s:/src' % dir ]
+     ] + [
+        '%s:/src' % dir,
+    ]
+
+    if as_user:
+        user = output(['whoami']).strip()
+        mounts += [
+            '%s:/home/%s/.gitconfig' % (dir / GIT_CONFIG_PATH, user),
+        ]
 
     mount_args = [ arg for mount in mounts for arg in [ '-v', clean_mount(mount) ] ]
 
