@@ -11,6 +11,7 @@ path += [ str(Path(__file__).parent / 'src') ]
 from cd import cd
 from conf import *
 from config import *
+from git import success
 from src import git
 from merge_results import merge_results
 from process import output, run
@@ -215,6 +216,14 @@ def make_run_commit(config):
     + out_paths
 
     git.add(files)
+
+    if not success('git', 'config', 'user.name'):
+        name = get_name(config)
+        run([ 'git', 'config', 'user.name', name ])
+
+    if not success('git', 'config', 'user.email'):
+        name = get_name(config)
+        run([ 'git', 'config', 'user.email', '%s@%s' % (name, name) ])
 
     # "-q" is necessary when committing files >1GB; https://public-inbox.org/git/xmqqsha3o4u7.fsf@gitster-ct.c.googlers.com/t/
     run([ 'git', 'commit', '-a', '-q', '--allow-empty', '-m', msg ])
