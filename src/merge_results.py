@@ -5,7 +5,7 @@ from process import run, success
 from src import git
 
 
-def merge_results(path, runs_path, config, base_sha, run_sha, msg, original_upstream_sha, remote, upstream_branch):
+def merge_results(path, runs_path, config, base_sha, run_sha, msg, original_upstream_sha, remote, upstream_branch, now_str):
     run([ 'git', 'remote', 'add', RUNS_REMOTE, runs_path ])
     git.fetch(RUNS_REMOTE)
     runs_head = '%s/%s' % (RUNS_REMOTE, RUNS_BRANCH)
@@ -44,11 +44,6 @@ def merge_results(path, runs_path, config, base_sha, run_sha, msg, original_upst
         git.add(state_paths)
         if not success('git', 'diff', '--cached', '--quiet'):
             print('Committing state updates')
-
-            from datetime import datetime as dt
-            now = dt.now()
-            now_str = now.strftime(FMT)
-
             msg = '%s: update state' % now_str
             run([ 'git', 'commit', '-q', '-m', msg])
             print('Setting parents to base SHA %s and run SHA %s' % (base_sha, run_sha))

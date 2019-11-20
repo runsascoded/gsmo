@@ -1,23 +1,36 @@
 #!/usr/bin/env python3
 
-from argparse import ArgumentParser
-from datetime import datetime as dt
 from pathlib import Path
-from tempfile import NamedTemporaryFile, TemporaryDirectory
-import sys
 from sys import path
 path += [ str(Path(__file__).parent / 'src') ]
 
-from cd import cd
 from conf import *
+
+# if pytz isn't installed, use the '$TZ' env-var as a work-around to get datetimes in UTC
+try:
+    from pytz import utc
+    from datetime import datetime as dt
+    now = dt.now()
+    now = now.astimezone(utc)
+except ImportError:
+    from os import environ as env
+    env['TZ'] = 'UTC'
+    print('Setting TZ (timezone) env var to UTC')
+    from datetime import datetime as dt
+    now = dt.now()
+
+now_str = now.strftime(FMT)
+
+
+from argparse import ArgumentParser
+from tempfile import NamedTemporaryFile, TemporaryDirectory
+import sys
+
+from cd import cd
 from config import *
 from merge_results import merge_results
 from process import output, run
 from src import git
-
-
-now = dt.now()
-now_str = now.strftime(FMT)
 
 
 def get_image(config):
@@ -222,6 +235,8 @@ def run_module(
         sys.stdout = stdout_path.open('w')
         sys.stderr = stderr_path.open('w')
 
+    print('%s: module %s starting' % (now_str, module))
+
     try:
         dir = TemporaryDirectory(prefix='gismo_')
 
@@ -270,14 +285,15 @@ def run_module(
 
                     merge_results(
                         module,
-                        runs_path,
-                        config,
-                        base_sha,
-                        run_sha,
-                        msg,
-                        original_upstream_sha,
-                        remote,
-                        upstream_branch,
+                        runs_path=runs_path,
+                        config=config,
+                        base_sha=base_sha,
+                        run_sha=run_sha,
+                        msg=msg,
+                        original_upstream_sha=original_upstream_sha,
+                        remote=remote,
+                        upstream_branch=upstream_branch,
+                        now_str=now_str
                     )
     finally:
         if capture_output:
@@ -300,7 +316,11 @@ if __name__ == '__main__':
         modules = [ Path.cwd() ]
 
     preserve_tmp_clones = args.preserve_tmp_clones
-    pipe_output = args.pipe_output
+    pipe_output = args.pipe_output  # TODO: (optionally?) "tee" stdout/stderr to terminal and runs/logs/runner dir
 
     for module in modules:
-        run_module(module, preserve_tmp_clones=preserve_tmp_clones, capture_output=not pipe_output)
+        run_module(
+            module,
+            preserve_tmp_clones=preserve_tmp_clones,
+            capture_output=not pipe_output
+        )
