@@ -11,7 +11,7 @@ from cd import cd
 from conf import *
 from config import *
 from merge_results import merge_results
-from process import output, run, success
+from process import output, run
 from src import git
 
 
@@ -20,18 +20,26 @@ now_str = now.strftime(FMT)
 
 
 def get_image(config):
-    gismo = get(config, 'gismo')
-    if type(gismo) is object:
-        base = get(gismo, 'base', default='gismo')
-        version = get(gismo, 'version', default='latest')
+    image = get(config, 'docker', 'image')
+    if image is None:
+        base = DEFAULT_IMAGE_BASE
+        version = DEFAULT_IMAGE_VERSION
+    elif type(image) is object:
+        base = get(image, 'base', default=DEFAULT_IMAGE_BASE)
+        version = get(image, 'version', default=DEFAULT_IMAGE_VERSION)
     else:
-        base = 'gismo'
-        if type(gismo) is str or type(gismo) is float or type(gismo) is int:
-            version = str(gismo)
-        elif gismo is None:
-            version = 'latest'
+        base = DEFAULT_IMAGE_BASE
+        if type(image) is str or type(image) is float or type(image) is int:
+            version = str(image)
+            pieces = version.split(':', 1)
+            if len(pieces) == 1:
+                pass
+            elif len(pieces) == 2:
+                [ base, version ] = pieces
+            else:
+                raise Exception('Unrecognized base-image value: %s' % image)
         else:
-            raise Exception('Unrecognized base-image value: %s' % gismo)
+            raise Exception('Unrecognized base-image value: %s' % image)
 
     return '%s:%s' % (base, version)
 
