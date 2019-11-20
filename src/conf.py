@@ -28,7 +28,7 @@ DOCKERFILE_PATH = 'Dockerfile'
 GIT_CONFIG_PATH = Path('conf') / '.gitconfig'
 
 DEFAULT_IMAGE_BASE = 'runsascoded/gismo'
-DEFAULT_IMAGE_VERSION = 'v1.0'
+DEFAULT_IMAGE_VERSION = 'v0.1'
 
 EARLY_EXIT_EXCEPTION_MSG_PREFIX = 'OK: '
 
