@@ -29,7 +29,7 @@ import sys
 from cd import cd
 from config import *
 from merge_results import merge_results
-from process import output, run
+from process import line, output, run
 from src import git
 
 
@@ -114,7 +114,7 @@ def load_config():
     return config
 
 
-def make_cmd(config, dir):
+def make_cmd(config, dir, shell=False):
     name = get_name(config)
     dockerfile = build_dockerfile(config)
 
@@ -148,13 +148,23 @@ def make_cmd(config, dir):
 
     mount_args = [ arg for mount in mounts for arg in [ '-v', clean_mount(mount) ] ]
 
-    cmd = \
-        [ 'docker', 'run' ] \
-        + user_args \
-        + group_args \
-        + mount_args \
-        + docker_args \
-        + [ name, '-n', name ]
+    if shell:
+        cmd = \
+            [ 'docker', 'run' ] \
+            + user_args \
+            + group_args \
+            + mount_args \
+            + docker_args \
+            + [ '-it', '--entrypoint', '/bin/bash' ] \
+            + [ name, ]
+    else:
+        cmd = \
+            [ 'docker', 'run' ] \
+            + user_args \
+            + group_args \
+            + mount_args \
+            + docker_args \
+            + [ name, '-n', name ]
 
     return dockerfile, cmd
 
@@ -219,6 +229,7 @@ def run_module(
     module,
     preserve_tmp_clones=False,
     capture_output=True,
+    shell=False,
 ):
     module = Path(module).absolute().resolve()
     runs_path = get_runs_clone(module)
@@ -253,7 +264,7 @@ def run_module(
 
                 config = load_config()
                 name = get_name(config)
-                dockerfile_src, cmd = make_cmd(config, dir)
+                dockerfile_src, cmd = make_cmd(config, dir, shell=shell)
                 run([ 'git', 'clone', module, dir ])
 
                 dockerfile = dir / DOCKERFILE_PATH
@@ -267,7 +278,9 @@ def run_module(
                     remote = git.remote()
 
                     # if not upstream_branch:
-                    upstream_branch = DEFAULT_UPSTREAM_BRANCH
+                    # upstream_branch = DEFAULT_UPSTREAM_BRANCH
+                    [ _remote, upstream_branch ] = line(['git','rev-parse','--abbrev-ref','--symbolic-full-name','@{u}']).split('/')
+                    assert _remote == remote
                     upstream_remote_branch = '%s/%s' % (remote, upstream_branch)
 
                     original_upstream_sha = git.sha(upstream_remote_branch)
@@ -281,6 +294,8 @@ def run_module(
 
                     run(cmd)
 
+                    if shell: return
+
                     run_sha, msg = make_run_commit(config)
 
                     merge_results(
@@ -293,7 +308,7 @@ def run_module(
                         original_upstream_sha=original_upstream_sha,
                         remote=remote,
                         upstream_branch=upstream_branch,
-                        now_str=now_str
+                        now_str=now_str,
                     )
     finally:
         if capture_output:
@@ -308,12 +323,17 @@ if __name__ == '__main__':
     parser = ArgumentParser()
     parser.add_argument('--preserve_tmp_clones', '-p', default=False, action='store_true', help="When true, don't clean up the temporary clones of modules that are run (useful for debugging)")
     parser.add_argument('--pipe_output', '-o', default=False, action='store_true', help="When true, pipe runner stdout/stderr through to the current terminal (by default, they're logged under runs/logs/runner")
+    parser.add_argument('-s','--shell',action='store_true',help='When set, open a Bash shell in the container, for interactive work/debugging')
     parser.add_argument('modules', nargs='*', help='Path to module to run')
     args, docker_args = parser.parse_known_args()
 
     modules = args.modules
     if not modules:
         modules = [ Path.cwd() ]
+
+    shell = args.shell
+    if shell:
+        assert len(modules) == 1
 
     preserve_tmp_clones = args.preserve_tmp_clones
     pipe_output = args.pipe_output  # TODO: (optionally?) "tee" stdout/stderr to terminal and runs/logs/runner dir
@@ -322,5 +342,6 @@ if __name__ == '__main__':
         run_module(
             module,
             preserve_tmp_clones=preserve_tmp_clones,
-            capture_output=not pipe_output
+            capture_output=not pipe_output,
+            shell=shell,
         )
