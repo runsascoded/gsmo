@@ -1,0 +1,12 @@
+.local
+.cache
+.ipython
+.jupyter
+.ipynb_checkpoints
+__pycache__
+*.egg-info
+.DS_Store
+*~
+*.bak
+\#*\#
+.\#*

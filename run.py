@@ -66,7 +66,7 @@ def build_dockerfile(config):
         docker = config['docker']
         pip = strs(docker, 'pip')
         if pip:
-            lines.append(' '.join([ 'RUN', 'pip3', 'install', '-U', ] + pip))
+            lines.append(' '.join([ 'RUN', 'pip', 'install', '-U', ] + pip))
         apt = strs(docker, 'apt')
         if apt:
             lines.append(' '.join([ 'RUN', 'apt-get', 'install', '-y', ] + apt))

@@ -22,7 +22,8 @@ def run_module(name, dir):
         run_shell_script = run_script_path.exists()
 
         exception = None
-        with OUT_PATH.open('w') as out, ERR_PATH.open('w') as err:
+        with OUT_PATH.open('w') as out, \
+             ERR_PATH.open('w') as err:
             if run_notebook and run_shell_script:
                 raise Exception('Found both %s and %s' % (run_notebook_path, run_script_path))
             elif run_notebook:
