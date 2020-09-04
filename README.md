@@ -1,4 +1,4 @@
-# gismo
+# gsmo
 Directory-based "module" system that tracks module-runs in Git.
 
 ## "Modules"
@@ -27,7 +27,7 @@ Notable fields:
     - `mount`/`mounts`: directories to mount into the docker container
         - relative paths allowed (will be resolved before passing to Docker)
         - `<src>` will be mapped to `<src>:<basename <src>>`, for convenience
-        - by default, the module is mounted under `/src`, and this module is under `/gismo`
+        - by default, the module is mounted under `/src`, and this module is under `/gsmo`
 
 ## Examples
 

@@ -27,7 +27,7 @@ RUNNER_STDERR_BASENAME = 'err'
 DOCKERFILE_PATH = 'Dockerfile'
 GIT_CONFIG_PATH = Path('conf') / '.gitconfig'
 
-DEFAULT_IMAGE_BASE = 'runsascoded/gismo'
+DEFAULT_IMAGE_BASE = 'runsascoded/gsmo'
 DEFAULT_IMAGE_VERSION = 'v0.1'
 
 EARLY_EXIT_EXCEPTION_MSG_PREFIX = 'OK: '

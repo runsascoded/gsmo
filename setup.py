@@ -12,7 +12,7 @@ setup(
     install_requires=[],
     long_description=long_description,
     long_description_content_type="text/markdown",
-    url="https://github.com/runsascoded/gismo",
+    url="https://github.com/runsascoded/gsmo",
     packages=find_packages(),
     classifiers=[
         "Programming Language :: Python :: 3",

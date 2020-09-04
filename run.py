@@ -261,7 +261,7 @@ def run_module(
     print('%s: module %s starting' % (now_str, module))
 
     try:
-        dir = TemporaryDirectory(prefix='gismo_')
+        dir = TemporaryDirectory(prefix='gsmo_')
 
         if preserve_tmp_clones:
             from contextlib import nullcontext

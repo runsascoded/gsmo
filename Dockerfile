@@ -35,9 +35,9 @@ COPY docker/etc/pip.conf docker/etc/.gitignore docker/etc/gitconfig /etc/
 #RUN apt-get update
 #RUN apt-get upgrade -y git
 
-ADD src /gismo
+ADD src /gsmo
 
 # mount a "module" git repo into /src
 WORKDIR /src
 
-ENTRYPOINT [ "python3.7", "/gismo/run_module.py", "/src" ]
+ENTRYPOINT [ "python3.7", "/gsmo/run_module.py", "/src" ]
