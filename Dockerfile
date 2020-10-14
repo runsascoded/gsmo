@@ -7,7 +7,12 @@ COPY etc/pip.conf etc/.gitignore etc/gitconfig /etc/
 
 RUN echo "deb http://ftp.us.debian.org/debian testing main" >> /etc/apt/sources.list && \
     apt-get update && \
-    apt-get install -y curl git nano && \
+    apt-get install -y \
+      curl \
+      gcc g++ \
+      git \
+      nano \
+      && \
     apt-get clean all && \
     rm -rf /var/lib/apt/lists
 

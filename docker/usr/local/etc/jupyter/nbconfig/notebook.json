@@ -1,0 +1,53 @@
+{
+  "load_extensions": {
+    "jupyter-js-widgets/extension": true
+  },
+  "keys": {
+    "command": {
+      "unbind": [
+        "0,0",
+        "l",
+        "h",
+        "shift-m",
+        "m"
+      ],
+      "bind": {
+        "0,0": "jupyter-notebook:restart-kernel",
+        "0,c": "jupyter-notebook:restart-kernel-and-clear-output",
+        "shift-e": "jupyter-notebook:edit-command-mode-keyboard-shortcuts",
+        "o,shift-r": "jupyter-notebook:restart-kernel-and-run-all-cells",
+        "0,shift-r": "jupyter-notebook:restart-kernel-and-run-all-cells",
+        "0,shift-e": "jupyter-notebook:confirm-restart-kernel-and-run-all-cells",
+        "ctrl-t": "jupyter-notebook:toggle-toolbar",
+        "ctrl-l": "jupyter-notebook:toggle-cell-line-numbers",
+        "ctrl-h": "jupyter-notebook:toggle-header",
+        "ctrl-m": "jupyter-notebook:merge-cell-with-previous-cell",
+        "ctrl-i": "jupyter-notebook:auto-indent",
+        "ctrl-shift-c": "jupyter-notebook:scroll-cell-center",
+        "ctrl-shift-t": "jupyter-notebook:scroll-cell-top",
+        "0,n": "jupyter-notebook:rename-notebook",
+        "0,ctrl-c": "jupyter-notebook:clear-all-cells-output",
+        "0,ctrl-o": "jupyter-notebook:toggle-all-cells-output-collapsed",
+        "0,ctrl-s": "jupyter-notebook:toggle-all-cells-output-scrolled",
+        "g,d": "nbdime:diff-notebook-checkpoint",
+        "g,g": "nbdime:diff-notebook-git",
+        "h": "jupyter-notebook:show-keyboard-shortcuts",
+        "ctrl-o": "jupyter-notebook:clear-cell-output",
+        "0,a": "jupyter-notebook:run-all-cells-above",
+        "shift-m": "jupyter-notebook:merge-cell-with-next-cell",
+        "m": "jupyter-notebook:change-cell-to-markdown",
+        "0,d": "jupyter-notebook:duplicate-notebook",
+        "0,s": "jupyter-notebook:shutdown-kernel"
+      }
+    }
+  },
+  "Notebook": {
+    "Header": true,
+    "Toolbar": true
+  },
+  "Cell": {
+    "cm_config": {
+      "lineNumbers": true
+    }
+  }
+}
