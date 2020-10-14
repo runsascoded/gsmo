@@ -1,10 +1,16 @@
 
+from os.path import exists
+from pathlib import Path
+from utz.process import line
+
+
 def strs(config, *keys):
     config = get(config, *keys)
     if config:
         if isinstance(config, list):
             return config
-        return [ config ]
+        else:
+            return [ config ]
     return []
 
 
@@ -22,5 +28,29 @@ def get(config, *keys, default=None):
 def get_name(config):
     if 'name' in config:
         return config['name']
-    from pathlib import Path
     return Path.cwd().name
+
+
+def clean_mount(mount):
+    pieces = mount.split(':')
+    if len(pieces) == 1:
+        src = pieces[0]
+        dst = '/%s' % src
+        pieces = [ src, dst ]
+
+    if len(pieces) != 2:
+        raise Exception('Invalid mount spec: %s' % mount)
+
+    [ src, dst ] = pieces
+    from os.path import abspath, expanduser, expandvars, realpath
+    def expand(path): return expandvars(expanduser(path))
+    src = realpath(abspath(expand(src)))
+    dst = expand(dst)
+    return '%s:%s' % (src, dst)
+
+
+def clean_group(group):
+    if exists(group):
+        return line('stat','-c','%g',group)
+    else:
+        return line('id','-g',group)

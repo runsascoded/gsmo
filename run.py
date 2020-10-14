@@ -78,31 +78,6 @@ def build_dockerfile(config):
     return dockerfile
 
 
-def clean_mount(mount):
-    pieces = mount.split(':')
-    if len(pieces) == 1:
-        src = pieces[0]
-        dest = '/%s' % Path(src).name
-        pieces = [ src, dest ]
-
-    if len(pieces) != 2:
-        raise Exception('Invalid mount spec: %s' % mount)
-
-    [ src, dest ] = pieces
-    from os.path import expanduser, expandvars
-    def expand(s):
-        return expandvars(expanduser(s))
-    src = Path(expand(src)).absolute().resolve()
-    return '%s:%s' % (src, expand(dest))
-
-
-def clean_group(group):
-    if group.index('/') >= 0:
-        return output([ 'stat', '-c', '%g', group ]).strip()
-    else:
-        return output([ 'id', '-g', group ]).strip()
-
-
 def load_config():
     import yaml
     if CONFIG_PATH.exists():
