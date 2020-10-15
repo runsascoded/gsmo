@@ -21,6 +21,7 @@ RUN pip install --upgrade --no-cache \
   pip wheel \
   jupyter==1.0.0 nbdime==2.1.0 \
   pandas==1.1.3 \
+  papermill==2.2.0 \
   pyyaml==5.3.1 \
   utz==0.0.17 utz[setup]==0.0.17
 

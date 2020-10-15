@@ -163,6 +163,8 @@ else:
         digest = int(m.hexdigest(), 16)
         jupyter_port = digest % (end-start) + start
         ports = [ f'{jupyter_port}:{jupyter_port}', ]
+    else:
+        ports = []
 
 
 with TemporaryDirectory() as dir:
