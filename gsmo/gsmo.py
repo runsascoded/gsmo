@@ -98,6 +98,27 @@ input = args.input or cwd
 
 
 dst = get('dst',DEFAULT_SRC_MOUNT_DIR)
+src = cwd
+workdir = []
+git_dir = join(src, '.git')
+if isfile(git_dir):
+    with open(git_dir,'r') as f:
+        [ ln ] = [ l for line in f.readlines() if (l := line.strip()) ]
+    rgx = r'^gitdir: (?P<path>.*)$'
+    if not (m := match(rgx, ln)):
+        raise Exception(f'Unrecognized .git file contents: {ln}')
+    path = m['path']
+    pcs = path.split(sep)
+    i = 0
+    while i < len(pcs) and pcs[i] == '..':
+        workdir = [basename(src)] + workdir
+        src = dirname(src)
+        i += 1
+    if i + 2 >= len(pcs) or pcs[i] != '.git' or pcs[i+1] != 'modules':
+        raise Exception(f'Expected gitdir path of the form `(../)*.git/modules`; found {path}')
+    print(f'workdir: {workdir}')
+    workdir = join(dst, *workdir)
+    print(f'Parsed ancestor mount for submodule: {src}:{dst}, workdir {workdir}')
 
 envs = get('env', [])
 if isinstance(envs, (list, tuple)):
@@ -120,7 +141,7 @@ out = get('out') or 'nbs'
 mounts = lists(get('mount', []))
 print(f'mounts: {mounts}')
 mounts = [ clean_mount(mount) for mount in mounts ]
-mounts += [ f'{cwd}:{dst}', ]
+mounts += [ f'{src}:{dst}', ]
 
 ports = get('port')
 apts = lists(get('apt'))
@@ -258,6 +279,7 @@ mount_args = [ [ '-v', mount ] for mount in mounts ]
 port_args = [ [ '-p', port ] for port in ports ]
 group_args = [ [ '--group-add', group ] for group in groups ]
 entrypoint_args = [ '--entrypoint', entrypoint ]
+workdir_args = [ '--workdir', workdir ]
 
 all_args = \
     flags + \
@@ -266,6 +288,7 @@ all_args = \
     mount_args + \
     port_args + \
     user_args + \
+    workdir_args + \
     group_args + \
     [image] + \
     args
