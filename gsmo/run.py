@@ -55,10 +55,14 @@ if json_str:
 
 from .papermill import execute
 
-execute(
-    input=nb,
-    output=out,
-    cwd=cwd,
-    progress_bar=progress_bar,
-    **params
-)
+def main():
+    execute(
+        input=nb,
+        output=out,
+        cwd=cwd,
+        progress_bar=progress_bar,
+        **params
+    )
+
+if __name__ == '__main__':
+    main()

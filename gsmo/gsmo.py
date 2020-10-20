@@ -20,7 +20,7 @@ group.add_argument('-j','--jupyter',action='store_true',help="Run a jupyter serv
 group.add_argument('-s','--shell',action='store_true',help="Open a /bin/bash shell in the container (instead of running a jupyter server)")
 parser.add_argument('-a','--apt',help='Comma-separated list of packages to apt-get install')
 parser.add_argument('--commit','--state',nargs='*',help='Paths to `git add` and commit after running')
-parser.add_argument('-C','--dir',help="Resolve paths relative to this directory (default: current directory)")
+parser.add_argument('-C','--dir',help="Resolve paths (e.g. mounts) relative to this directory (default: current directory)")
 parser.add_argument('-d','--detach',action='store_true',help="When booting into Jupyter server mode, detach the container")
 parser.add_argument('--dst',help='Path inside Docker container to mount current directory/repo to (default: /src)')
 parser.add_argument('-e','--env',nargs='*',help='Env vars to set when running Docker container')
@@ -177,7 +177,7 @@ if ports:
         raise ValueError(f'Unrecognized port/range: {port}')
 else:
     if jupyter:
-        # Hash the module name to determine a port for Jupyter
+        # Hash the module name to determine a port for Jupyter in the range [2**10,2**16)
         start = 2**10
         end = 2**16
         from hashlib import sha256
