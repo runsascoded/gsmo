@@ -99,7 +99,6 @@ input = args.input or cwd
 
 dst = get('dst',DEFAULT_SRC_MOUNT_DIR)
 src = cwd
-workdir = []
 git_dir = join(src, '.git')
 if isfile(git_dir):
     with open(git_dir,'r') as f:
@@ -109,6 +108,7 @@ if isfile(git_dir):
         raise Exception(f'Unrecognized .git file contents: {ln}')
     path = m['path']
     pcs = path.split(sep)
+    workdir = []
     i = 0
     while i < len(pcs) and pcs[i] == '..':
         workdir = [basename(src)] + workdir
@@ -119,6 +119,8 @@ if isfile(git_dir):
     print(f'workdir: {workdir}')
     workdir = join(dst, *workdir)
     print(f'Parsed ancestor mount for submodule: {src}:{dst}, workdir {workdir}')
+else:
+    workdir = dst
 
 envs = get('env', [])
 if isinstance(envs, (list, tuple)):
