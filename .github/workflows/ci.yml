@@ -4,7 +4,10 @@ jobs:
   docker:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v2
+      - name: Checkout code
+        uses: actions/checkout@v2
+        with:
+          ref: ${{ github.head_ref }}
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v1
       - name: Set up Docker Buildx
@@ -22,6 +25,11 @@ jobs:
           file: docker/Dockerfile
           push: true
           tags: runsascoded/gsmo:latest
+      - name: Tag and push Git commit SHA
+        run: |
+          docker pull runsascoded/gsmo
+          docker tag runsascoded/gsmo runsascoded/gsmo:$GITHUB_SHA
+          docker push runsascoded/gsmo:$GITHUB_SHA
       - name: Image digest
         run: echo ${{ steps.docker_build.outputs.digest }}
   release:
