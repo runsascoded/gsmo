@@ -41,7 +41,7 @@ parser.add_argument('-y','--config-yaml',help='YAML file with default configurat
 args = parser.parse_args()
 
 DEFAULT_IMAGE = 'runsascoded/gsmo'
-DEFAULT_DIND_IMAGE = f'{DEFAULT_IMAGE}/dind'
+DEFAULT_DIND_IMAGE = f'{DEFAULT_IMAGE}:dind'
 
 DEFAULT_CONFIG_STEMS = ['gsmo','config']
 CONFIG_XTNS = ['yaml','yml']
@@ -81,7 +81,7 @@ def get(keys, default=None):
 
     for k in keys:
         if hasattr(args, k):
-            if v := getattr(args, k) is not None:
+            if (v := getattr(args, k)) is not None:
                 return v
 
     for k in keys:
