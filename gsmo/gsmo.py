@@ -22,6 +22,7 @@ parser.add_argument('-a','--apt',help='Comma-separated list of packages to apt-g
 parser.add_argument('--commit','--state',nargs='*',help='Paths to `git add` and commit after running')
 parser.add_argument('-C','--dir',help="Resolve paths (e.g. mounts) relative to this directory (default: current directory)")
 parser.add_argument('-d','--detach',action='store_true',help="When booting into Jupyter server mode, detach the container")
+parser.add_argument('-D','--dind',action='store_true',help="When set, mount /var/run/docker.sock in container (and default to a base image that contains docker installed)")
 parser.add_argument('--dst',help='Path inside Docker container to mount current directory/repo to (default: /src)')
 parser.add_argument('-e','--env',nargs='*',help='Env vars to set when running Docker container')
 parser.add_argument('-i','--image',help='Base docker image to build on (default: runsascoded/gsmo)')
@@ -40,6 +41,8 @@ parser.add_argument('-y','--config-yaml',help='YAML file with default configurat
 args = parser.parse_args()
 
 DEFAULT_IMAGE = 'runsascoded/gsmo'
+DEFAULT_DIND_IMAGE = f'{DEFAULT_IMAGE}/dind'
+
 DEFAULT_CONFIG_STEMS = ['gsmo','config']
 CONFIG_XTNS = ['yaml','yml']
 DEFAULT_SRC_MOUNT_DIR = '/src'
@@ -133,8 +136,6 @@ elif envs is not None and not isinstance(envs, dict):
     raise ValueError(f'Unexpected env dict: {envs}')
 
 commit = lists(get('commit'))
-base_image = get('image', DEFAULT_IMAGE)
-image = base_image
 
 groups = lists(get('group'))
 groups = [ clean_group(group) for group in groups ]
@@ -145,6 +146,15 @@ mounts = lists(get('mount', []))
 print(f'mounts: {mounts}')
 mounts = [ clean_mount(mount) for mount in mounts ]
 mounts += [ f'{src}:{dst}', ]
+
+dind = get('dind')
+if dind:
+    default_image = DEFAULT_DIND_IMAGE
+    mounts += [ '/var/run/docker.sock:/var/run/docker.sock']
+else:
+    default_image = DEFAULT_IMAGE
+base_image = get('image', default_image)
+image = base_image
 
 ports = get('port')
 apts = lists(get('apt'))

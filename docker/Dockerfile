@@ -21,8 +21,7 @@ RUN pip install --upgrade --no-cache pip wheel \
   jupyter==1.0.0 nbdime==2.1.0 \
   pandas==1.1.3 \
   papermill==2.2.0 \
-  pyyaml==5.3.1 \
-  utz[setup]==0.0.20
+  pyyaml==5.3.1
 
 # Install dotfiles + bash helpers and Jupyter configs
 WORKDIR /root
@@ -38,6 +37,7 @@ COPY home/.bashrc /home/.bashrc
 # Make sure /root/.bashrc is world-accessible
 RUN chmod o+rx /root
 
-RUN git clone -b main --depth 1 https://github.com/runsascoded/gsmo /gsmo && pip install -e /gsmo
+RUN pip install --upgrade --no-cache utz[setup]==0.0.20 \
+ && git clone -b main --depth 1 https://github.com/runsascoded/gsmo /gsmo && pip install -e /gsmo
 
 ENTRYPOINT [ "gsmo-entrypoint", "/src" ]
