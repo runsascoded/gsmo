@@ -22,7 +22,7 @@ RUN pip install --upgrade --no-cache pip wheel \
   pandas==1.1.3 \
   papermill==2.2.0 \
   pyyaml==5.3.1 \
-  utz[setup]==0.0.18
+  utz[setup]==0.0.20
 
 # Install dotfiles + bash helpers and Jupyter configs
 WORKDIR /root

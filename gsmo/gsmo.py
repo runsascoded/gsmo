@@ -34,6 +34,7 @@ parser.add_argument('-R','--skip-requirements-txt',action='store_true',help="Ski
 parser.add_argument('-t','--tag',help='Comma-separated (or multi-arg) list of tags to add to built docker image')
 parser.add_argument('-U','--root','--no-user',action='store_true',help="Run docker as root (instead of as the current system user)")
 parser.add_argument('-v','--mount',nargs='*',help='Paths to mount into Docker container; relative paths are accepted, and the destination can be omitted if it matches the src (relative to the current directory, e.g. "home" → "/home")')
+parser.add_argument('--pip_mount',help='Optionally `pip install -e` a mounted directory inside the container before running the usual entrypoint script')
 parser.add_argument('-y','--config-yaml',help='YAML file with default configuration settings (default: {gsmo,config}.{yml,yaml})')
 
 args = parser.parse_args()
@@ -255,8 +256,14 @@ elif jupyter:
     if root:
         args += [ '--allow-root', ]
 else:
-    entrypoint = 'utz.sh'
+    entrypoint = 'gsmo-entrypoint'
     args = [ 'run.ipynb', out, ]
+
+
+pip_mounts = lists(get('pip_mount'))
+if pip_mounts:
+    args = [ len(pip_mounts) ] + pip_mounts + [ entrypoint ] + args
+    entrypoint = '/gsmo/pip_entrypoint.sh'
 
 
 # Get Git user name/email, propagate into image

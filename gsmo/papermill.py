@@ -6,15 +6,14 @@ import json
 from jupyter_client import kernelspec
 from os import makedirs, remove
 from os.path import abspath, basename, dirname, exists, join, splitext
-from papermill import execute_notebook
 from pathlib import Path
 from sys import executable
 from traceback import format_exception
 
-from .collections import singleton
-from . import git
-from .process import line, run
-from papermill import PapermillExecutionError
+from papermill import execute_notebook, PapermillExecutionError
+from utz.collections import singleton
+from utz import git
+from utz.process import line, run
 
 EARLY_EXIT_EXCEPTION_MSG_PREFIX = 'OK: '
 
