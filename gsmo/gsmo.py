@@ -33,6 +33,7 @@ parser.add_argument('-p','--pip',help='Comma-separated (or multi-arg) list of pa
 parser.add_argument('-P','--port',nargs='*',help='Ports (or ranges) to expose from the container (if Jupyter server is being run, the first port in the first provided range will be used); can be passed multiple times and/or as comma-delimited lists')
 parser.add_argument('-R','--skip-requirements-txt',action='store_true',help="Skip {reading,`pip install`ing} any requirements.txt that is present")
 parser.add_argument('-t','--tag',help='Comma-separated (or multi-arg) list of tags to add to built docker image')
+parser.add_argument('-I','--no-interactive',action='store_true',help="Don't run interactively / allocate a TTY (i.e. skip `-it` flags to `docker run`)")
 parser.add_argument('-U','--root','--no-user',action='store_true',help="Run docker as root (instead of as the current system user)")
 parser.add_argument('-v','--mount',nargs='*',help='Paths to mount into Docker container; relative paths are accepted, and the destination can be omitted if it matches the src (relative to the current directory, e.g. "home" → "/home")')
 parser.add_argument('--pip_mount',help='Optionally `pip install -e` a mounted directory inside the container before running the usual entrypoint script')
@@ -248,7 +249,11 @@ else:
 if check('docker','container','inspect',name):
     run('docker','container','rm',name)
 
-flags = [ '-it' ]
+interactive = not args.no_interactive
+if interactive:
+    flags = [ '-it' ]
+else:
+    flags = []
 if shell:
     # Launch Bash shell
     entrypoint = '/bin/bash'

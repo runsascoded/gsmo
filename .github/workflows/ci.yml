@@ -8,17 +8,24 @@ jobs:
         uses: actions/checkout@v2
         with:
           ref: ${{ github.head_ref }}
+          submodules: true
       - name: Set up Python
         uses: actions/setup-python@v2
         with:
           python-version: '3.8.6'
+      - name: Run tests
+        run: |
+          pip install pytest utz[setup]==0.0.20
+          pip install -e .
+          git config --global user.name CI
+          git config --global user.email ci@ci.ci
+          pytest -vs
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v1
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v1
       - name: Build, tag and push
         run: |
-          pip install utz==0.0.20
           docker/build.py --push -u runsascoded -t runsascoded/gsmo=${{ secrets.DOCKER_HUB_TOKEN }}
   release:
     runs-on: ubuntu-latest
