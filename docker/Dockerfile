@@ -37,7 +37,7 @@ COPY home/.bashrc /home/.bashrc
 # Make sure /root/.bashrc is world-accessible
 RUN chmod o+rx /root
 
-RUN pip install --upgrade --no-cache utz[setup]==0.0.20 \
+RUN pip install --upgrade --no-cache utz[setup]==0.0.23 \
  && git clone -b main --depth 1 https://github.com/runsascoded/gsmo /gsmo && pip install -e /gsmo
 
 ENTRYPOINT [ "gsmo-entrypoint", "/src" ]
