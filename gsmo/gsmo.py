@@ -157,7 +157,7 @@ else:
 base_image = get('image', default_image)
 image = base_image
 
-ports = get('port')
+ports = lists(get('port'))
 apts = lists(get('apt'))
 pips = lists(get('pip'))
 tags = lists(get('tag'))
@@ -166,7 +166,7 @@ skip_requirements_txt = args.skip_requirements_txt
 root = get('root')
 
 jupyter = args.jupyter
-jupyter_port = None
+jupyter_src_port = jupyter_dst_port = None
 
 detach = args.detach
 if detach:
@@ -177,16 +177,41 @@ shell = args.shell
 
 
 if ports:
-    # Flatten comma-delimited lists
-    ports = [ arg for port in ports for arg in port.split(',') ]
-    port = ports[0]
-    port_pcs = port.split('-')
-    if len(port_pcs) == 1:
-        jupyter_port = port
-    elif len(port_pcs) == 2:
-        jupyter_port = port_pcs[0]
-    else:
-        raise ValueError(f'Unrecognized port/range: {port}')
+    # Canonicalize a port argument:
+    # - "5432" → "5432:5432"
+    # - "8880-8890" → "8880-8890:8880-8890"
+    # - "5432:5432" → "5432:5432" (no-op)
+    def clean_port(port):
+        pcs = port.split(':')
+        if len(pcs) == 1:
+            port = pcs[0]
+            return f'{port}:{port}'
+        elif len(pcs) == 2:
+            return port
+        else:
+            raise ValueError(f'Unrecognized port/range: {port}')
+
+    # Flatten and normalize comma-delimited list of port args
+    ports = [
+        clean_port(arg)
+        for port in ports
+        for arg in port.split(',')
+    ]
+
+    if jupyter:
+        [ src_port, dst_port ] = ports[0].split(':')
+
+        src_pcs = src_port.split('-')
+        if len(src_pcs) <= 2:
+            jupyter_src_port = src_pcs[0]
+        else:
+            raise ValueError(f'Unrecognized port/range: {src_port}')
+
+        dst_pcs = dst_port.split('-')
+        if len(dst_pcs) <= 2:
+            jupyter_dst_port = dst_pcs[0]
+        else:
+            raise ValueError(f'Unrecognized port/range: {dst_port}')
 else:
     if jupyter:
         # Hash the module name to determine a port for Jupyter in the range [2**10,2**16)
@@ -196,8 +221,8 @@ else:
         m = sha256()
         m.update(name.encode())
         digest = int(m.hexdigest(), 16)
-        jupyter_port = digest % (end-start) + start
-        ports = [ f'{jupyter_port}:{jupyter_port}', ]
+        jupyter_src_port = jupyter_dst_port = digest % (end-start) + start
+        ports = [ f'{jupyter_src_port}:{jupyter_dst_port}', ]
     else:
         ports = []
 
@@ -261,11 +286,11 @@ if shell:
 elif jupyter:
     # Launch `jupyter notebook` server
     entrypoint = 'jupyter'
-    assert jupyter_port
+    assert jupyter_dst_port
     args = [
         'notebook',
         '--ip','0.0.0.0',
-        '--port',jupyter_port,
+        '--port',jupyter_dst_port,
         '--ContentsManager.allow_hidden=True',
     ]
     if root:
@@ -339,10 +364,10 @@ def main():
                 rgx = f'(?P<url>http://0\.0\.0\.0:(?P<port>\d+)/\?token=(?P<token>[0-9a-f]+)) :: {dst}'
                 if not (m := match(rgx, line)):
                     raise RuntimeError(f'Unrecognized notebook server line: {line}')
-                if m['port'] != str(jupyter_port):
-                    raise RuntimeError(f'Jupyter running on unexpected port {m["port"]} (!= {jupyter_port})')
+                if m['port'] != str(jupyter_dst_port):
+                    raise RuntimeError(f'Jupyter running on unexpected port {m["port"]} (!= {jupyter_dst_port})')
                 token = m['token']
-                url = f'http://127.0.0.1:{jupyter_port}?token={token}'
+                url = f'http://127.0.0.1:{jupyter_src_port}?token={token}'
                 run('open',url)
                 if not detach:
                     run('docker','attach',name)
