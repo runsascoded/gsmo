@@ -22,7 +22,8 @@ parser.add_argument('-a','--apt',help='Comma-separated list of packages to apt-g
 parser.add_argument('--commit','--state',nargs='*',help='Paths to `git add` and commit after running')
 parser.add_argument('-C','--dir',help="Resolve paths (e.g. mounts) relative to this directory (default: current directory)")
 parser.add_argument('-d','--detach',action='store_true',help="When booting into Jupyter server mode, detach the container")
-parser.add_argument('-D','--dind',action='store_true',help="When set, mount /var/run/docker.sock in container (and default to a base image that contains docker installed)")
+parser.add_argument('--dind',action='store_true',help="When set, mount /var/run/docker.sock in container (and default to a base image that contains docker installed)")
+parser.add_argument('-D','--no-docker',dest='docker',default=True,action='store_false',help="Run in the current shell instead of in Docker")
 parser.add_argument('--dst',help='Path inside Docker container to mount current directory/repo to (default: /src)')
 parser.add_argument('-e','--env',nargs='*',help='Env vars to set when running Docker container')
 parser.add_argument('-i','--image',help='Base docker image to build on (default: runsascoded/gsmo)')
@@ -31,6 +32,7 @@ parser.add_argument('-n','--name',help='Container name (defaults to directory ba
 parser.add_argument('-o','--out',help='Path or directory to write output notebook to (relative to `input` directory; default: "nbs")')
 parser.add_argument('-p','--pip',help='Comma-separated (or multi-arg) list of packages to pip install')
 parser.add_argument('-P','--port',nargs='*',help='Ports (or ranges) to expose from the container (if Jupyter server is being run, the first port in the first provided range will be used); can be passed multiple times and/or as comma-delimited lists')
+parser.add_argument('--rm','--remove-container',action='store_true',help="Remove Docker container after run (pass `--rm` to `docker run`)")
 parser.add_argument('-R','--skip-requirements-txt',action='store_true',help="Skip {reading,`pip install`ing} any requirements.txt that is present")
 parser.add_argument('-t','--tag',help='Comma-separated (or multi-arg) list of tags to add to built docker image')
 parser.add_argument('-I','--no-interactive',action='store_true',help="Don't run interactively / allocate a TTY (i.e. skip `-it` flags to `docker run`)")
@@ -157,7 +159,10 @@ else:
 base_image = get('image', default_image)
 image = base_image
 
-ports = get('port')
+docker = get('docker', True)
+rm = get('remove_container')
+
+ports = lists(get('port'))
 apts = lists(get('apt'))
 pips = lists(get('pip'))
 tags = lists(get('tag'))
@@ -166,7 +171,7 @@ skip_requirements_txt = args.skip_requirements_txt
 root = get('root')
 
 jupyter = args.jupyter
-jupyter_port = None
+jupyter_src_port = jupyter_dst_port = None
 
 detach = args.detach
 if detach:
@@ -174,19 +179,46 @@ if detach:
         raise ValueError(f'-d/--detach only applicable to -j/--jupyter mode')
 
 shell = args.shell
+if shell and not docker:
+    raise ValueError('`shell` mode not supported when Docker mode is disabled')
 
 
 if ports:
-    # Flatten comma-delimited lists
-    ports = [ arg for port in ports for arg in port.split(',') ]
-    port = ports[0]
-    port_pcs = port.split('-')
-    if len(port_pcs) == 1:
-        jupyter_port = port
-    elif len(port_pcs) == 2:
-        jupyter_port = port_pcs[0]
-    else:
-        raise ValueError(f'Unrecognized port/range: {port}')
+    # Canonicalize a port argument:
+    # - "5432" → "5432:5432"
+    # - "8880-8890" → "8880-8890:8880-8890"
+    # - "5432:5432" → "5432:5432" (no-op)
+    def clean_port(port):
+        pcs = port.split(':')
+        if len(pcs) == 1:
+            port = pcs[0]
+            return f'{port}:{port}'
+        elif len(pcs) == 2:
+            return port
+        else:
+            raise ValueError(f'Unrecognized port/range: {port}')
+
+    # Flatten and normalize comma-delimited list of port args
+    ports = [
+        clean_port(arg)
+        for port in ports
+        for arg in port.split(',')
+    ]
+
+    if jupyter:
+        [ src_port, dst_port ] = ports[0].split(':')
+
+        src_pcs = src_port.split('-')
+        if len(src_pcs) <= 2:
+            jupyter_src_port = src_pcs[0]
+        else:
+            raise ValueError(f'Unrecognized port/range: {src_port}')
+
+        dst_pcs = dst_port.split('-')
+        if len(dst_pcs) <= 2:
+            jupyter_dst_port = dst_pcs[0]
+        else:
+            raise ValueError(f'Unrecognized port/range: {dst_port}')
 else:
     if jupyter:
         # Hash the module name to determine a port for Jupyter in the range [2**10,2**16)
@@ -196,31 +228,36 @@ else:
         m = sha256()
         m.update(name.encode())
         digest = int(m.hexdigest(), 16)
-        jupyter_port = digest % (end-start) + start
-        ports = [ f'{jupyter_port}:{jupyter_port}', ]
+        jupyter_src_port = jupyter_dst_port = digest % (end-start) + start
+        ports = [ f'{jupyter_src_port}:{jupyter_dst_port}', ]
     else:
         ports = []
 
 
-with TemporaryDirectory() as dir:
+with NamedTemporaryFile(dir='.', prefix='Dockerfile.') as f:
     # If this becomes true, write out a fresh Dockerfile (to `tmp_dockerfile`) and build an image
     # based from it; otherwise, use an extant upstream image
-    docker = False
-    tmp_dockerfile = join(dir, 'Dockerfile')
+    build_image = False
+    tmp_dockerfile = f.name
 
     dockerfile = join(cwd, 'Dockerfile')
     if exists(dockerfile):
-        docker = True
+        build_image = True
         copy(dockerfile, tmp_dockerfile)
 
-    def write(*lines):
-        global docker
-        if not docker:
-            docker = True
+    def write(*lines, warn_on_no_docker=True):
+        global build_image
+        if not build_image:
+            build_image = True
             write(f'FROM {base_image}')
-        with open(tmp_dockerfile, 'a') as f:
+        if docker:
+            with open(tmp_dockerfile, 'a') as f:
+                for line in lines:
+                    f.write(f'{line}\n')
+        elif warn_on_no_docker:
+            stderr.write(f'Docker configs skipped in docker-less mode:\n')
             for line in lines:
-                f.write(f'{line}\n')
+                stderr.write('\t%s\n' % line)
 
     if apts:
         write(f'RUN apt-get update && apt-get install {" ".join(apts)}')
@@ -231,11 +268,17 @@ with TemporaryDirectory() as dir:
             pips += [ line.rstrip('\n') for line in f.readlines() if line ]
 
     if pips:
-        write(f'RUN pip install {" ".join(pips)}')
+        if docker:
+            write(f'RUN pip install {" ".join(pips)}', warn_on_no_docker=False)
+        else:
+            import pip
+            print(f'pip install {" ".join(pips)}')
+            pip.main(['install'] + pips)
 
-    if docker:
-        run('docker','build','-t',name,'-f',tmp_dockerfile,cwd)
-        image = name
+    if build_image:
+        if docker:
+            run('docker','build','-t',name,'-f',tmp_dockerfile,cwd)
+            image = name
 
 # Determine user to run as (inside Docker container)
 if root:
@@ -246,14 +289,19 @@ else:
     user_args = [ '-u', f'{uid}:{gid}' ]
 
 # Remove any existing container
-if check('docker','container','inspect',name):
-    run('docker','container','rm',name)
+if docker:
+    if check('docker','container','inspect',name):
+        run('docker','container','rm',name)
 
 interactive = not args.no_interactive
 if interactive:
     flags = [ '-it' ]
 else:
     flags = []
+if rm:
+    assert docker
+    flags += ['--rm']
+
 if shell:
     # Launch Bash shell
     entrypoint = '/bin/bash'
@@ -261,11 +309,11 @@ if shell:
 elif jupyter:
     # Launch `jupyter notebook` server
     entrypoint = 'jupyter'
-    assert jupyter_port
+    assert jupyter_dst_port
     args = [
         'notebook',
         '--ip','0.0.0.0',
-        '--port',jupyter_port,
+        '--port',jupyter_dst_port,
         '--ContentsManager.allow_hidden=True',
     ]
     if root:
@@ -281,11 +329,20 @@ if pip_mounts:
     entrypoint = '/gsmo/pip_entrypoint.sh'
 
 
-# Get Git user name/email, propagate into image
+def get_git_id(k, fmt):
+    try:
+        v = line('git','config',f'user.{k}')
+    except CalledProcessError:
+        v = line('git','log','-n','1',f'--format={fmt}')
+        stderr.write(f'Falling back to Git user {k} from most recent commit: {v}\n')
+    return v
+
+# Get Git user name/email for propagating into image
 user = o(
-    name  = line('git','config','user.name'),
-    email = line('git','config','user.email'),
+    name  = get_git_id( 'name', '%an'),
+    email = get_git_id('email', '%ae'),
 )
+
 
 # Set up author info for git committing
 envs = {
@@ -319,45 +376,53 @@ all_args = \
 
 
 def main():
-    if jupyter and check('which','open'):
-        # 1. run docker container in detached mode
-        # 2. parse+open jupyter token URL in browser (try every 1s)
-        # 3. re-attach container
-        run(
-            'docker','run',
-            '-w',dst,
-            '-d',
-            '--name',name,
-            all_args,
-        )
-        while True:
-            lns = lines('docker','exec',name,'jupyter','notebook','list')
-            if lns[0] != 'Currently running servers:':
-                raise Exception('Unexpected `jupyter notebook list` output:\n\t%s' % "\n\t".join(lns))
-            if len(lns) == 2:
-                line = lns[1]
-                rgx = f'(?P<url>http://0\.0\.0\.0:(?P<port>\d+)/\?token=(?P<token>[0-9a-f]+)) :: {dst}'
-                if not (m := match(rgx, line)):
-                    raise RuntimeError(f'Unrecognized notebook server line: {line}')
-                if m['port'] != str(jupyter_port):
-                    raise RuntimeError(f'Jupyter running on unexpected port {m["port"]} (!= {jupyter_port})')
-                token = m['token']
-                url = f'http://127.0.0.1:{jupyter_port}?token={token}'
-                run('open',url)
-                if not detach:
-                    run('docker','attach',name)
-                break
-            else:
-                SLEEP_INTERVAL = 1
-                print(f'No Jupyter server found in container {name}; sleep {SLEEP_INTERVAL}s…')
-                sleep(SLEEP_INTERVAL)
+    if docker:
+        if jupyter and check('which','open'):
+            # 1. run docker container in detached mode
+            # 2. parse+open jupyter token URL in browser (try every 1s)
+            # 3. re-attach container
+            run(
+                'docker','run',
+                '-w',dst,
+                '-d',
+                '--name',name,
+                all_args,
+            )
+            while True:
+                lns = lines('docker','exec',name,'jupyter','notebook','list')
+                if lns[0] != 'Currently running servers:':
+                    raise Exception('Unexpected `jupyter notebook list` output:\n\t%s' % "\n\t".join(lns))
+                if len(lns) == 2:
+                    line = lns[1]
+                    rgx = f'(?P<url>http://0\.0\.0\.0:(?P<port>\d+)/\?token=(?P<token>[0-9a-f]+)) :: {dst}'
+                    if not (m := match(rgx, line)):
+                        raise RuntimeError(f'Unrecognized notebook server line: {line}')
+                    if m['port'] != str(jupyter_dst_port):
+                        raise RuntimeError(f'Jupyter running on unexpected port {m["port"]} (!= {jupyter_dst_port})')
+                    token = m['token']
+                    url = f'http://127.0.0.1:{jupyter_src_port}?token={token}'
+                    run('open',url)
+                    if not detach:
+                        run('docker','attach',name)
+                    break
+                else:
+                    SLEEP_INTERVAL = 1
+                    print(f'No Jupyter server found in container {name}; sleep {SLEEP_INTERVAL}s…')
+                    sleep(SLEEP_INTERVAL)
+        else:
+            run(
+                'docker','run',
+                '-w',dst,
+                '--name',name,
+                all_args,
+            )
     else:
-        run(
-            'docker','run',
-            '-w',dst,
-            '--name',name,
-            all_args,
-        )
+        if not jupyter:
+            raise ValueError(f'In non-docker mode, only -j/--jupyter mode is supported')
+        if jupyter_src_port != jupyter_dst_port:
+            raise ValueError(f'Mismatching jupyter ports in non-docker mode: {jupyter_src_port} != {jupyter_dst_port}')
+        jupyter_port = jupyter_src_port
+        run('jupyter','notebook','--port',jupyter_port,)
 
 
 if __name__ == '__main__':
