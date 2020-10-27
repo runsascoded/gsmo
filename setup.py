@@ -1,7 +1,6 @@
 from utz.setup import setup
 
 setup(
-    version="0.0.1",
     install_requires=[
         'utz[setup]==0.0.23',
     ],
