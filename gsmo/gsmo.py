@@ -329,11 +329,20 @@ if pip_mounts:
     entrypoint = '/gsmo/pip_entrypoint.sh'
 
 
-# Get Git user name/email, propagate into image
+def get_git_id(k, fmt):
+    try:
+        v = line('git','config',f'user.{k}')
+    except CalledProcessError:
+        v = line('git','log','-n','1',f'--format={fmt}')
+        stderr.write(f'Falling back to Git user {k} from most recent commit: {v}\n')
+    return v
+
+# Get Git user name/email for propagating into image
 user = o(
-    name  = line('git','config','user.name'),
-    email = line('git','config','user.email'),
+    name  = get_git_id( 'name', '%an'),
+    email = get_git_id('email', '%ae'),
 )
+
 
 # Set up author info for git committing
 envs = {
