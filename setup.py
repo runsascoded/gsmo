@@ -12,4 +12,5 @@ setup(
             'gsmo-entrypoint = gsmo.run:main',
         ],
     },
+    python_requires='>3.8',  # uses the walrus operator
 )
