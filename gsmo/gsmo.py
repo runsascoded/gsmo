@@ -78,13 +78,9 @@ def lists(args, sep=','):
         return []
 
     if isinstance(args, str):
-        args = [ args ]
+        args = args.split(sep)
 
-    return [
-        a
-        for arg in args
-        for a in arg.split(sep)
-    ]
+    return args
 
 def get(keys, default=None):
     if isinstance(keys, str):
