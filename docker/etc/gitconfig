@@ -1,4 +1,2 @@
 [core]
   excludesfile = /etc/.gitignore
-[include]
-  path = /etc/.git_id
