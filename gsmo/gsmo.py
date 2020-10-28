@@ -289,12 +289,14 @@ with NamedTemporaryFile(dir='.', prefix='Dockerfile.') as f:
             image = name
 
 # Determine user to run as (inside Docker container)
-if root:
-    user_args = []
-else:
+user_args = []
+if not root:
     uid = line('id','-u')
-    gid = line('id','-g')
-    user_args = [ '-u', f'{uid}:{gid}' ]
+    if uid == '0':
+        root = True
+    else:
+        gid = line('id','-g')
+        user_args = [ '-u', f'{uid}:{gid}' ]
 
 # Remove any existing container
 if docker:
