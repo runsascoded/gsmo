@@ -264,7 +264,7 @@ with NamedTemporaryFile(dir='.', prefix='Dockerfile.') as f:
                 stderr.write('\t%s\n' % line)
 
     if apts:
-        write(f'RUN apt-get update && apt-get install {" ".join(apts)}')
+        write(f'RUN apt-get update && apt-get install -y {" ".join(apts)}')
 
     reqs_txt = join(cwd, 'requirements.txt')
     if exists(reqs_txt) and not skip_requirements_txt:
