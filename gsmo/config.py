@@ -1,5 +1,5 @@
 
-from os.path import exists
+from os.path import basename, exists, isfile, join, sep
 from pathlib import Path
 from utz.process import line
 
@@ -46,6 +46,8 @@ def clean_mount(mount):
     def expand(path): return expandvars(expanduser(path))
     src = realpath(abspath(expand(src)))
     dst = expand(dst)
+    if isfile(src) and dst.endswith(sep):
+        dst = join(dst, basename(src))
     return '%s:%s' % (src, dst)
 
 
