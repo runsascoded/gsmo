@@ -39,7 +39,8 @@ parser.add_argument('-I','--no-interactive',action='store_true',help="Don't run 
 parser.add_argument('-U','--root','--no-user',action='store_true',help="Run docker as root (instead of as the current system user)")
 parser.add_argument('-v','--mount',nargs='*',help='Paths to mount into Docker container; relative paths are accepted, and the destination can be omitted if it matches the src (relative to the current directory, e.g. "home" → "/home")')
 parser.add_argument('--pip_mount',help='Optionally `pip install -e` a mounted directory inside the container before running the usual entrypoint script')
-parser.add_argument('-y','--config-yaml',help='YAML file with default configuration settings (default: {gsmo,config}.{yml,yaml})')
+parser.add_argument('-y','--config-yaml-path',help='Path to a YAML file with default configuration settings (default: {gsmo,config}.{yml,yaml})')
+parser.add_argument('-Y','--config-yaml',help='YAML string with default configuration settings')
 
 args = parser.parse_args()
 
@@ -57,6 +58,9 @@ config_paths = [
     if exists(f := f'{stem}.{xtn}')
 ]
 
+if (config_yaml_path := args.config_yaml_path):
+    config_paths = [config_yaml_path] + config_paths
+
 if config_paths:
     config_path = singleton(config_paths)
     import yaml
@@ -64,6 +68,10 @@ if config_paths:
         config = o(yaml.load(f))
 else:
     config = o()
+
+if (config_yaml_str := args.config_yaml):
+    config_yaml = yaml.safe_load(config_yaml_str)
+    config = o.merge(config, config_yaml)
 
 def lists(args, sep=','):
     if args is None:

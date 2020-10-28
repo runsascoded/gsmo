@@ -2,7 +2,7 @@ from utz.setup import setup
 
 setup(
     install_requires=[
-        'utz[setup]==0.0.23',
+        'utz[setup]==0.0.24',
     ],
     url="https://github.com/runsascoded/gsmo",
     entry_points={
