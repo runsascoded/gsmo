@@ -44,6 +44,10 @@ def build(repository, file, latest, python_version, push, tokens, usernames, tag
         if check('git','diff','--quiet','--exit-code','HEAD'):
             sha = line('git','log','-n1','--format=%h')
             tag(f'{sha}_{python_version}')
+            if (tags := lines('git','tag','--points-at','HEAD')):
+                for t in tags:
+                    tag(t)
+                    tag(f'{t}_{python_version}')
         else:
             print("Detected uncommitted changes; skipping Git SHA tag")
 
