@@ -8,16 +8,17 @@ GH_REPO = 'runsascoded/gsmo'
 
 def build(
     repository: str,
-    dockerfile: str,
     latest: bool,
     python_version: str,
     push: bool,
     tokens: dict,
     usernames: dict,
+    dockerfile: str = None,
     tag_prefix: str = None,
     embed: str = None,
     ref: str = None,
     sha: str = None,
+    docker_dir: str = None,
     **build_args,
 ):
     def build_repo(*pcs):
@@ -42,21 +43,79 @@ def build(
             run('docker','push',tagged_repo)
 
     base_repo = build_repo()
-    run(
-        'docker','build',
-        '-t',base_repo,
-        '-f',dockerfile,
-        [ ['--build-arg',f'{k}={v}'] for k,v in build_args.items() ],
-        '.',
-    )
     if embed:
         with NamedTemporaryFile(prefix='Dockerfile.') as t:
             with open(t.name,'w') as f:
                 def write(*lines):
-                    for line in lines:
-                        f.write('%s\n' % line)
+                    if not lines:
+                        f.write('\n')
+                    else:
+                        for line in lines:
+                            f.write('%s\n' % line)
 
-                write(f'FROM {base_repo}')
+                def copy(*args):
+                    (*srcs, dst) = args
+                    if docker_dir:
+                        srcs = [ join(docker_dir, src) for src in srcs ]
+                    write(f'COPY {" ".join([*srcs, dst])}')
+
+                write(
+                    '# Base Dockerfile for Python projects; recent Git, pandas/jupyter/sqlalchemy, and dotfiles for working in-container',
+                    'ARG PYTHON=3.8.6',
+                    'FROM python:${PYTHON}-slim',
+                )
+                write()
+                write('# Disable pip upgrade warning, add default system-level gitignore, and configs for setting git user.{email,name} at run-time',)
+                copy(
+                    'etc/pip.conf','etc/.gitignore','etc/gitconfig',
+                    '/etc/',
+                )
+                write()
+                write(
+                    'RUN echo "deb http://ftp.us.debian.org/debian testing main" >> /etc/apt/sources.list \\',
+                    ' && apt-get update \\',
+                    ' && apt-get install -y -o APT::Immediate-Configure=0 \\',
+                    '    curl \\',
+                    '    gcc g++ \\',
+                    '    git \\',
+                    '    nano \\',
+                    ' && apt-get clean all \\',
+                    ' && rm -rf /var/lib/apt/lists',
+                )
+                write()
+                write(
+                    '# Basic pip dependencies: Jupyter, pandas',
+                    'RUN pip install --upgrade --no-cache pip wheel \\',
+                    ' && pip install --upgrade --no-cache \\',
+                    '        jupyter==1.0.0 nbdime==2.1.0 \\',
+                    '        pandas==1.1.3 \\',
+                    '        papermill==2.2.0 \\',
+                    '        pyyaml==5.3.1',
+                )
+                write()
+                write(
+                    '# Install dotfiles + bash helpers and Jupyter configs',
+                    'WORKDIR /root',
+                    'RUN curl -L https://j.mp/_rc > _rc && chmod u+x _rc && ./_rc -b server runsascoded/.rc',
+                )
+                copy('usr/local/etc/jupyter/nbconfig/notebook.json','/usr/local/etc/jupyter/nbconfig/')
+                write()
+                write(
+                    'WORKDIR /',
+                    '',
+                    "# Create an open directory for pointing anonymouse users' $HOME at (e.g. `-e HOME=/home -u `id -u`:`id -g` `)",
+                    'RUN chmod ugo+rwx /home',
+                    '# Simple .bashrc for anonymous users that just sources /root/.bashrc',
+                )
+                copy('home/.bashrc','/home/.bashrc')
+                write(
+                    '# Make sure /root/.bashrc is world-accessible',
+                    'RUN chmod o+rx /root',
+                    '',
+                    'RUN pip install --upgrade --no-cache utz[setup]==0.0.25',
+                    '',
+                    'ENTRYPOINT [ "gsmo-entrypoint", "/src" ]',
+                )
                 if embed == 'clone':
                     assert ref
                     assert sha
@@ -72,6 +131,14 @@ def build(
                 '-f',t.name,
                 '.',
             )
+    else:
+        run(
+            'docker','build',
+            '-t',base_repo,
+            '-f',dockerfile,
+            [ ['--build-arg',f'{k}={v}'] for k,v in build_args.items() ],
+            '.',
+        )
 
     _push(base_repo)
 
@@ -148,7 +215,7 @@ def main():
         with cd(git_root):
             build(
                 **build_kwargs,
-                dockerfile=join(docker_dir,'Dockerfile'),
+                docker_dir=docker_dir,
                 embed='copy',
             )
     else:
