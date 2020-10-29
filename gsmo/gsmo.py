@@ -39,8 +39,8 @@ parser.add_argument('-I','--no-interactive',action='store_true',help="Don't run 
 parser.add_argument('-U','--root','--no-user',action='store_true',help="Run docker as root (instead of as the current system user)")
 parser.add_argument('-v','--mount',nargs='*',help='Paths to mount into Docker container; relative paths are accepted, and the destination can be omitted if it matches the src (relative to the current directory, e.g. "home" → "/home")')
 parser.add_argument('--pip_mount',help='Optionally `pip install -e` a mounted directory inside the container before running the usual entrypoint script')
-parser.add_argument('-y','--config-yaml-path',help='Path to a YAML file with default configuration settings (default: {gsmo,config}.{yml,yaml})')
-parser.add_argument('-Y','--config-yaml',help='YAML string with default configuration settings')
+parser.add_argument('-y','--run-config-yaml-path',help='Path to a YAML file with configuration settings to pass through to the module being run; "run" mode only')
+parser.add_argument('-Y','--run-config-yaml-str',help='YAML string with configuration settings to pass through to the module being run; "run" mode only')
 
 args = parser.parse_args()
 
@@ -61,18 +61,25 @@ config_paths = [
     if exists(f := f'{stem}.{xtn}')
 ]
 
-if (config_yaml_path := args.config_yaml_path):
-    config_paths = [config_yaml_path] + config_paths
+run_config = {}
+if (run_config_yaml_path := args.run_config_yaml_path):
+    import yaml
+    with open(run_config_yaml_path,'r') as f:
+        run_config = yaml.safe_load(f)
+
+if (run_config_yaml_str := args.run_config_yaml_str):
+    import yaml
+    run_config = o.merge(run_config, yaml.safe_load(run_config_yaml_str))
 
 if config_paths:
     config_path = singleton(config_paths)
     import yaml
     with open(config_path,'r') as f:
-        config = o(yaml.load(f))
+        config = o(yaml.safe_load(f))
 else:
     config = o()
 
-if (config_yaml_str := args.config_yaml):
+if (config_yaml_str := args.run_config_yaml_str):
     config_yaml = yaml.safe_load(config_yaml_str)
     config = o.merge(config, config_yaml)
 
@@ -311,6 +318,10 @@ if rm:
     assert docker
     flags += ['--rm']
 
+if run_config:
+    if jupyter or shell:
+        raise ValueError(f'Run configs not supported in `jupyter`/`shell` modes')
+
 if shell:
     # Launch Bash shell
     entrypoint = '/bin/bash'
@@ -337,6 +348,14 @@ if pip_mounts:
     args = [ len(pip_mounts) ] + pip_mounts + [ entrypoint ] + args
     entrypoint = '/gsmo/pip_entrypoint.sh'
 
+
+RUN_CONFIG_YML_PATH = '/run_config.yml'
+if run_config:
+    run_config_path = NamedTemporaryFile(delete=False)
+    with open(run_config_path.name,'w') as f:
+        yaml.safe_dump(dict(run_config), f)
+    mounts += [ f'{run_config_path}:{RUN_CONFIG_YML_PATH}' ]
+    args += [ '-f',RUN_CONFIG_YML_PATH ]
 
 def get_git_id(k, fmt):
     try:
