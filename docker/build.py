@@ -47,84 +47,114 @@ def build(
         with NamedTemporaryFile(prefix='Dockerfile.') as t:
             with open(t.name,'w') as f:
                 def write(*lines):
-                    if not lines:
-                        f.write('\n')
-                    else:
-                        for line in lines:
-                            f.write('%s\n' % line)
+                    for line in lines:
+                        f.write('%s\n' % line)
 
-                def copy(*args):
+                def COPY(*args, dir=docker_dir):
                     (*srcs, dst) = args
-                    if docker_dir:
-                        srcs = [ join(docker_dir, src) for src in srcs ]
+                    if dir:
+                        srcs = [ join(dir, src) for src in srcs ]
                     write(f'COPY {" ".join([*srcs, dst])}')
 
-                write(
-                    '# Base Dockerfile for Python projects; recent Git, pandas/jupyter/sqlalchemy, and dotfiles for working in-container',
-                    'ARG PYTHON=3.8.6',
-                    'FROM python:${PYTHON}-slim',
-                )
-                write()
-                write('# Disable pip upgrade warning, add default system-level gitignore, and configs for setting git user.{email,name} at run-time',)
-                copy(
+                def NOTE(*lines):
+                    write(*[f'# {line}' for line in lines])
+
+                def RUN(*cmds):
+                    write('RUN %s' % ' \\\n && '.join(cmds))
+
+                def ARG(k, v=None):
+                    if v is None:
+                        write(f'ARG {k}')
+                    else:
+                        write(f'ARG {k}={v}')
+
+                def FROM(repo, tag=None, registry=None):
+                    if registry:
+                        repo = f'{registry}/{repo}'
+                    if tag:
+                        repo = f'{repo}:{tag}'
+                    write(f'FROM {repo}')
+
+                def LN(): write('')
+
+                def WORKDIR(dst='/'):
+                    write(f'WORKDIR {dst}')
+
+                def ENTRYPOINT(arg):
+                    write('ENTRYPOINT %s' % str(arg))
+
+                NOTE('Base Dockerfile for Python projects; recent Git, pandas/jupyter/sqlalchemy, and dotfiles for working in-container')
+                FROM('python',f'{python_version}-slim')
+                LN()
+                NOTE('Disable pip upgrade warning, add default system-level gitignore, and configs for setting git user.{email,name} at run-time',)
+                COPY(
                     'etc/pip.conf','etc/.gitignore','etc/gitconfig',
                     '/etc/',
                 )
-                write()
-                write(
-                    'RUN echo "deb http://ftp.us.debian.org/debian testing main" >> /etc/apt/sources.list \\',
-                    ' && apt-get update \\',
-                    ' && apt-get install -y -o APT::Immediate-Configure=0 \\',
-                    '    curl \\',
-                    '    gcc g++ \\',
-                    '    git \\',
-                    '    nano \\',
-                    ' && apt-get clean all \\',
-                    ' && rm -rf /var/lib/apt/lists',
+                LN()
+                RUN(
+                    'echo "deb http://ftp.us.debian.org/debian testing main" >> /etc/apt/sources.list',
+                    'apt-get update',
+                    'apt-get install -y -o APT::Immediate-Configure=0 curl gcc g++ git nano',
+                    'apt-get clean all',
+                    'rm -rf /var/lib/apt/lists',
                 )
-                write()
-                write(
-                    '# Basic pip dependencies: Jupyter, pandas',
-                    'RUN pip install --upgrade --no-cache pip wheel \\',
-                    ' && pip install --upgrade --no-cache \\',
-                    '        jupyter==1.0.0 nbdime==2.1.0 \\',
-                    '        pandas==1.1.3 \\',
-                    '        papermill==2.2.0 \\',
-                    '        pyyaml==5.3.1',
+                LN()
+                pips = [
+                    dict(
+                        pip=None, wheel=None,
+                    ),
+                    dict(
+                        jupyter='1.0.0', nbdime='2.1.0',
+                        pandas='1.1.3',
+                        papermill='2.2.0',
+                        pyyaml='5.3.1',
+                    )
+                ]
+                NOTE('Basic pip dependencies: Jupyter, pandas')
+                RUN(*[
+                    'pip install --upgrade --no-cache %s' % ' '.join([
+                        f'{k}=={v}' if v else k
+                        for k,v in pip.items()
+                    ])
+                    for pip in pips
+                ])
+                LN()
+                NOTE('Install dotfiles + bash helpers and Jupyter configs')
+                WORKDIR('/root')
+                RUN(
+                    'curl -L https://j.mp/_rc > _rc',
+                    'chmod u+x _rc',
+                    './_rc -b server runsascoded/.rc',
                 )
-                write()
-                write(
-                    '# Install dotfiles + bash helpers and Jupyter configs',
-                    'WORKDIR /root',
-                    'RUN curl -L https://j.mp/_rc > _rc && chmod u+x _rc && ./_rc -b server runsascoded/.rc',
-                )
-                copy('usr/local/etc/jupyter/nbconfig/notebook.json','/usr/local/etc/jupyter/nbconfig/')
-                write()
-                write(
-                    'WORKDIR /',
-                    '',
-                    "# Create an open directory for pointing anonymouse users' $HOME at (e.g. `-e HOME=/home -u `id -u`:`id -g` `)",
-                    'RUN chmod ugo+rwx /home',
-                    '# Simple .bashrc for anonymous users that just sources /root/.bashrc',
-                )
-                copy('home/.bashrc','/home/.bashrc')
-                write(
-                    '# Make sure /root/.bashrc is world-accessible',
-                    'RUN chmod o+rx /root',
-                    '',
-                    'RUN pip install --upgrade --no-cache utz[setup]==0.0.25',
-                    '',
-                    'ENTRYPOINT [ "gsmo-entrypoint", "/src" ]',
-                )
+                COPY('usr/local/etc/jupyter/nbconfig/notebook.json','/usr/local/etc/jupyter/nbconfig/'); LN()
+
+                WORKDIR(); LN()
+
+                NOTE("Create an open directory for pointing anonymouse users' $HOME at (e.g. `-e HOME=/home -u `id -u`:`id -g` `)")
+                RUN('chmod ugo+rwx /home')
+
+                NOTE('Simple .bashrc for anonymous users that just sources /root/.bashrc')
+                COPY('home/.bashrc','/home/.bashrc')
+                NOTE('Make sure /root/.bashrc is world-accessible')
+                RUN('chmod o+rx /root')
+                LN()
+                RUN('pip install --upgrade --no-cache utz[setup]==0.0.25')
+                LN()
+                ENTRYPOINT([ "gsmo-entrypoint", "/src" ])
                 if embed == 'clone':
                     assert ref
                     assert sha
-                    write(f'RUN git clone -b {ref} --depth 1 https://github.com/{GH_REPO} {GSMO_DIR} && cd {GSMO_DIR} && git checkout {sha}')
+                    RUN(
+                        f'git clone -b {ref} --depth 1 https://github.com/{GH_REPO} {GSMO_DIR}',
+                        f'cd {GSMO_DIR}',
+                        f'git checkout {sha}',
+                    )
                 elif embed == 'copy':
-                    write(f'COPY . {GSMO_DIR}')
+                    COPY('.',GSMO_DIR, dir=None)
                 else:
                     raise ValueError('Invalid "embed" value: %s; choices: {clone,copy}' % embed)
-                write(f'RUN pip install -e {GSMO_DIR}')
+                RUN(f'pip install -e {GSMO_DIR}')
             run(
                 'docker','build',
                 '-t',base_repo,
