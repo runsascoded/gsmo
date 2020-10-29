@@ -10,6 +10,12 @@ except ImportError:
 
 from utz import *
 
+from .version import get_version
+version = get_version()
+
+DEFAULT_IMAGE = f'runsascoded/gsmo:{version}'
+DEFAULT_DIND_IMAGE = f'{DEFAULT_IMAGE}:dind_{version}'
+
 from .config import clean_group, clean_mount
 
 parser = ArgumentParser()
@@ -26,7 +32,7 @@ parser.add_argument('--dind',action='store_true',help="When set, mount /var/run/
 parser.add_argument('-D','--no-docker',dest='docker',default=True,action='store_false',help="Run in the current shell instead of in Docker")
 parser.add_argument('--dst',help='Path inside Docker container to mount current directory/repo to (default: /src)')
 parser.add_argument('-e','--env',nargs='*',help='Env vars to set when running Docker container')
-parser.add_argument('-i','--image',help='Base docker image to build on (default: runsascoded/gsmo)')
+parser.add_argument('-i','--image',help=f'Base docker image to build on (default: f{DEFAULT_IMAGE})')
 parser.add_argument('-g','--group',nargs='*',help='Groups to add user to in the Docker container')
 parser.add_argument('-n','--name',help='Container name (defaults to directory basename)')
 parser.add_argument('-o','--out',help='Path or directory to write output notebook to (relative to `input` directory; default: "nbs")')
@@ -43,12 +49,6 @@ parser.add_argument('-y','--run-config-yaml-path',help='Path to a YAML file with
 parser.add_argument('-Y','--run-config-yaml-str',help='YAML string with configuration settings to pass through to the module being run; "run" mode only')
 
 args = parser.parse_args()
-
-from .version import get_version
-version = get_version()
-
-DEFAULT_IMAGE = f'runsascoded/gsmo:{version}'
-DEFAULT_DIND_IMAGE = f'{DEFAULT_IMAGE}:dind_{version}'
 
 DEFAULT_CONFIG_STEMS = ['gsmo','config']
 CONFIG_XTNS = ['yaml','yml']
@@ -354,7 +354,7 @@ if run_config:
     run_config_path = NamedTemporaryFile(delete=False)
     with open(run_config_path.name,'w') as f:
         yaml.safe_dump(dict(run_config), f)
-    mounts += [ f'{run_config_path}:{RUN_CONFIG_YML_PATH}' ]
+    mounts += [ f'{run_config_path.name}:{RUN_CONFIG_YML_PATH}' ]
     args += [ '-f',RUN_CONFIG_YML_PATH ]
 
 def get_git_id(k, fmt):
