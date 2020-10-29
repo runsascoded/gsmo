@@ -44,8 +44,11 @@ parser.add_argument('-Y','--config-yaml',help='YAML string with default configur
 
 args = parser.parse_args()
 
-DEFAULT_IMAGE = 'runsascoded/gsmo'
-DEFAULT_DIND_IMAGE = f'{DEFAULT_IMAGE}:dind'
+from .version import get_version
+version = get_version()
+
+DEFAULT_IMAGE = f'runsascoded/gsmo:{version}'
+DEFAULT_DIND_IMAGE = f'{DEFAULT_IMAGE}:dind_{version}'
 
 DEFAULT_CONFIG_STEMS = ['gsmo','config']
 CONFIG_XTNS = ['yaml','yml']
