@@ -2,6 +2,8 @@
 
 from utz import *
 
+VERSION_TAG_RGX = r'^v(?P<version>\d+\.\d+\.\d+)$'
+
 def build(repository, file, latest, python_version, push, tokens, usernames, tag_prefix=None, **build_args):
     def build_repo(*pcs):
         if tag_prefix:
@@ -44,8 +46,11 @@ def build(repository, file, latest, python_version, push, tokens, usernames, tag
         tag(python_version)
         if check('git','diff','--quiet','--exit-code','HEAD'):
             sha = line('git','log','-n1','--format=%h')
+            tag(sha)
             tag(sha, python_version)
             for t in lines('git','tag','--points-at','HEAD'):
+                if (m := match(VERSION_TAG_RGX, t)):
+                    t = m['version']
                 tag(t)
                 tag(t, python_version)
         else:
@@ -90,7 +95,7 @@ def main():
         raise ValueError("Refusing to build from unclean git worktree")
 
     # Require a branch or tag to clone for shallow /gsmo checkout inside container
-    ref = line('git','symbolic-ref','-q','--short','HEAD', empty_ok=True)
+    ref = line('git','symbolic-ref','--short','HEAD', err_ok=True)
     if not ref:
         tags = lines('git','tag','--points-at','HEAD')
         if not tags:

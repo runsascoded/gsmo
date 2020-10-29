@@ -39,7 +39,7 @@ RUN chmod o+rx /root
 
 ARG REF
 ARG SHA
-RUN pip install --upgrade --no-cache utz[setup]==0.0.24 \
+RUN pip install --upgrade --no-cache utz[setup]==0.0.25 \
  && git clone -b $REF --depth 1 https://github.com/runsascoded/gsmo /gsmo \
  && cd /gsmo \
  && git checkout $SHA \
