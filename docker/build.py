@@ -95,7 +95,7 @@ def main():
         raise ValueError("Refusing to build from unclean git worktree")
 
     # Require a branch or tag to clone for shallow /gsmo checkout inside container
-    ref = line('git','symbolic-ref','--short','HEAD', err_ok=True)
+    ref = line('git','symbolic-ref','-q','--short','HEAD', err_ok=True)
     if not ref:
         tags = lines('git','tag','--points-at','HEAD')
         if not tags:
