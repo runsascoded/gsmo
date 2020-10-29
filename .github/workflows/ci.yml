@@ -15,6 +15,7 @@ jobs:
           python-version: '3.8.6'
       - name: Run tests
         run: |
+          pip install wheel
           pip install pytest utz[setup]==0.0.24
           pip install -e .
           git config --global user.name CI
@@ -30,7 +31,7 @@ jobs:
       - name: Install release dependencies
         if: "startsWith(github.ref, 'refs/tags/')"
         run: |
-          pip install setuptools wheel twine
+          pip install setuptools twine
       - name: Build and publish
         if: "startsWith(github.ref, 'refs/tags/')"
         env:
