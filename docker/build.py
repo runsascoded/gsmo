@@ -97,6 +97,8 @@ def main():
             raise ValueError(f"Couldn't infer current branch or tag for self-clone of gsmo into Docker image")
         ref = tags[0]
 
+    sha=line('git','log','-n','1','--format=%h')
+
     build(
         repository=repository,
         file='Dockerfile',
@@ -106,6 +108,7 @@ def main():
         tokens=tokens,
         usernames=usernames,
         REF=ref,
+        SHA=sha,
     )
     build(
         repository=repository,
