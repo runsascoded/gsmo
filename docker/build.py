@@ -2,20 +2,17 @@
 
 from utz import *
 
-def build(repository, file, latest, python_version, push, tokens, usernames, tag_prefix=None):
-    if tag_prefix:
-        img = f'{repository}:{tag_prefix}'
-    else:
-        img = repository
-    run(
-        'docker','build',
-        '-t',img,
-        '-f',file,
-        '--build-arg',f'PYTHON={python_version}',
-        '.',
-    )
+def build(repository, file, latest, python_version, push, tokens, usernames, tag_prefix=None, **build_args):
+    def build_repo(*pcs):
+        if tag_prefix:
+            pcs = (tag_prefix,) + pcs
+        tg = '_'.join(pcs)
+        if tg:
+            return f'{repository}:{tg}'
+        else:
+            return repository
 
-    def _push(repository):
+    def _push(tagged_repo):
         if push:
             if tokens:
                 token = tokens.get(repository, tokens.get(None))
@@ -25,29 +22,32 @@ def build(repository, file, latest, python_version, push, tokens, usernames, tag
                         cmd += ['-u',username]
 
                     run(cmd)
-            run('docker','push',repository)
+            run('docker','push',tagged_repo)
 
-    _push(img)
+    base_repo = build_repo()
+    run(
+        'docker','build',
+        '-t',base_repo,
+        '-f',file,
+        [ ['--build-arg',f'{k}={v}'] for k,v in build_args.items() ],
+        '.',
+    )
+    _push(base_repo)
 
-    def tag(t, img=img):
-        base_img = img
-        if tag_prefix:
-            img = f'{repository}:{tag_prefix}_{t}'
-        else:
-            img = f'{repository}:{t}'
+    def tag(*tag_pcs):
+        repo = build_repo(*tag_pcs)
         if not latest:
-            run('docker','tag',base_img,img)
-            _push(img)
+            run('docker','tag',base_repo,repo)
+            _push(repo)
 
     if not latest:
         tag(python_version)
         if check('git','diff','--quiet','--exit-code','HEAD'):
             sha = line('git','log','-n1','--format=%h')
-            tag(f'{sha}_{python_version}')
-            if (tags := lines('git','tag','--points-at','HEAD')):
-                for t in tags:
-                    tag(t)
-                    tag(f'{t}_{python_version}')
+            tag(sha, python_version)
+            for t in lines('git','tag','--points-at','HEAD'):
+                tag(t)
+                tag(t, python_version)
         else:
             print("Detected uncommitted changes; skipping Git SHA tag")
 
@@ -85,6 +85,18 @@ def main():
     usernames = parse_dict('username')
 
     chdir(dirname(__file__))
+
+    if not check('git','diff','--quiet','--exit-code','HEAD'):
+        raise ValueError("Refusing to build from unclean git worktree")
+
+    # Require a branch or tag to clone for shallow /gsmo checkout inside container
+    ref = line('git','symbolic-ref','-q','--short','HEAD', empty_ok=True)
+    if not ref:
+        tags = lines('git','tag','--points-at','HEAD')
+        if not tags:
+            raise ValueError(f"Couldn't infer current branch or tag for self-clone of gsmo into Docker image")
+        ref = tags[0]
+
     build(
         repository=repository,
         file='Dockerfile',
@@ -93,6 +105,7 @@ def main():
         push=push,
         tokens=tokens,
         usernames=usernames,
+        REF=ref,
     )
     build(
         repository=repository,
