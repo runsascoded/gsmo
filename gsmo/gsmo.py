@@ -44,6 +44,7 @@ parser.add_argument('-t','--tag',help='Comma-separated (or multi-arg) list of ta
 parser.add_argument('-I','--no-interactive',action='store_true',help="Don't run interactively / allocate a TTY (i.e. skip `-it` flags to `docker run`)")
 parser.add_argument('-U','--root','--no-user',action='store_true',help="Run docker as root (instead of as the current system user)")
 parser.add_argument('-v','--mount',nargs='*',help='Paths to mount into Docker container; relative paths are accepted, and the destination can be omitted if it matches the src (relative to the current directory, e.g. "home" → "/home")')
+parser.add_argument('--missing-mounts',default='raise',choices=['raise','err','error','warn','ignore','ok',],help='Control behavior when any mount paths are nonexistent')
 parser.add_argument('--pip_mount',help='Optionally `pip install -e` a mounted directory inside the container before running the usual entrypoint script')
 parser.add_argument('-y','--run-config-yaml-path',help='Path to a YAML file with configuration settings to pass through to the module being run; "run" mode only')
 parser.add_argument('-Y','--run-config-yaml-str',help='YAML string with configuration settings to pass through to the module being run; "run" mode only')
@@ -160,8 +161,8 @@ groups = [ clean_group(group) for group in groups ]
 out = get('out') or 'nbs'
 
 mounts = lists(get('mount', []))
-print(f'mounts: {mounts}')
-mounts = [ clean_mount(mount) for mount in mounts ]
+missing_mounts = get('missing_mounts')
+mounts = [ m for mount in mounts if (m := clean_mount(mount, missing_mount=missing_mounts)) ]
 mounts += [ f'{src}:{dst}', ]
 
 dind = get('dind')

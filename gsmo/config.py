@@ -1,6 +1,7 @@
 
 from os.path import basename, exists, isfile, join, sep
 from pathlib import Path
+from sys import stderr
 from utz.process import line
 
 
@@ -31,7 +32,7 @@ def get_name(config):
     return Path.cwd().name
 
 
-def clean_mount(mount):
+def clean_mount(mount, missing_mount='raise'):
     pieces = mount.split(':')
     if len(pieces) == 1:
         src = pieces[0]
@@ -48,6 +49,15 @@ def clean_mount(mount):
     dst = expand(dst)
     if isfile(src) and dst.endswith(sep):
         dst = join(dst, basename(src))
+    if not exists(src):
+        msg = f"Mount src doesn't exist: {src}"
+        if missing_mount in ['raise','err','error']:
+            raise ValueError(msg)
+        if missing_mount == 'warn':
+            stderr.write('%s\n' % msg)
+        else:
+            assert missing_mount in ('ignore','ok')
+        return None
     return '%s:%s' % (src, dst)
 
 
