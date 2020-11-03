@@ -46,7 +46,7 @@ def build(
     if embed:
         from utz import docker
         from utz.use import use
-        file = docker.File()
+        file = docker.File(copy_dir=docker_dir)
         with use(file):
             NOTE('Base Dockerfile for Python projects; recent Git, pandas/jupyter/sqlalchemy, and dotfiles for working in-container')
             FROM('python',f'{python_version}-slim')
