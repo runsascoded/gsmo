@@ -35,6 +35,7 @@ parser.add_argument('--dst',help='Path inside Docker container to mount current 
 parser.add_argument('-e','--env',nargs='*',help='Env vars to set when running Docker container')
 parser.add_argument('-i','--image',help=f'Base docker image to build on (default: f{DEFAULT_IMAGE})')
 parser.add_argument('-I','--no-interactive',action='store_true',help="Don't run interactively / allocate a TTY (i.e. skip `-it` flags to `docker run`)")
+parser.add_argument('-g','--image-group',action='store_true',help='Create current group inside Docker image (at build time)')
 parser.add_argument('-G','--group',nargs='*',help='Groups to add user to when running the Docker container')
 parser.add_argument('-n','--name',help='Container name (defaults to directory basename)')
 parser.add_argument('-o','--out',help='Path or directory to write output notebook to (relative to `input` directory; default: "nbs")')
@@ -44,7 +45,7 @@ parser.add_argument('--rm','--remove-container',action='store_true',help="Remove
 parser.add_argument('-R','--skip-requirements-txt',action='store_true',help="Skip {reading,`pip install`ing} any requirements.txt that is present")
 parser.add_argument('--sudo',action='store_true',help="Ensure Docker image user has sudo privileges")
 parser.add_argument('-t','--tag',help='Comma-separated (or multi-arg) list of tags to add to built docker image')
-parser.add_argument('-u','--image-user',action='store_true',help="Create user (and groups) inside Docker image, at build time")
+parser.add_argument('-u','--image-user',action='store_true',help="Create current user inside Docker image (at build time)")
 parser.add_argument('-U','--root','--no-user',action='store_true',help="Run docker as root (instead of as the current system user)")
 parser.add_argument('-v','--mount',nargs='*',help='Paths to mount into Docker container; relative paths are accepted, and the destination can be omitted if it matches the src (relative to the current directory, e.g. "home" → "/home")')
 parser.add_argument('--missing-mounts',default='raise',choices=['raise','err','error','warn','ignore','ok',],help='Control behavior when any mount paths are nonexistent')
@@ -190,6 +191,8 @@ name = get('name', default=basename(input))
 skip_requirements_txt = args.skip_requirements_txt
 root = get('root')
 image_user = get('image_user')
+image_group = get('image_group')
+sudo = get('sudo')
 
 jupyter = args.jupyter
 jupyter_src_port = jupyter_dst_port = None
@@ -272,22 +275,18 @@ with use(file):
     if exists(dockerfile):
         build_image = True
         copy(dockerfile, tmp_dockerfile)
-
-    def check(kind, warn_on_no_docker=True):
-        if docker:
-            global build_image
-            if not build_image:
-                build_image = True
-                FROM(base_image)
-        elif warn_on_no_docker:
-            stderr.write(f'Docker {kind} configs skipped in docker-less mode:\n')
+    else:
+        FROM(base_image)
 
     if apts:
-        check('apt')
-        RUN(
-            'apt-get update',
-            f'apt-get install -y {" ".join(apts)}'
-        )
+        if docker:
+            build_image = True
+            RUN(
+                'apt-get update',
+                f'apt-get install -y {" ".join(apts)}'
+            )
+        else:
+            stderr.write(f'Installing apt deps skipped in docker-less mode: {" ".join(apts)}\n')
 
     reqs_txt = join(cwd, 'requirements.txt')
     if exists(reqs_txt) and not skip_requirements_txt:
@@ -296,33 +295,31 @@ with use(file):
 
     if pips:
         if docker:
+            build_image = True
             RUN(f'pip install {" ".join(pips)}')
         else:
             import pip
             print(f'pip install {" ".join(pips)}')
             pip.main(['install'] + pips)
 
-    # ENV HOME /home/$user
-    # COPY home /home/$user
-    #
-    # RUN groupadd -o -g $gid $group
-    # RUN useradd -u $uid -g $gid -G sudo -s /bin/bash $user
-    #
-    # # Passwordless sudo for this user
-    # RUN perl -pi -e "s/^%sudo(.*ALL=).*/${user}\1(ALL) NOPASSWD: ALL/" /etc/sudoers'''
-
-    if image_user:
-        RUN(
-            f'groupadd -o -g {id.gid} {id.group}',
-            f'useradd -u {id.uid} -g {id.gid} -s /bin/bash {id.user}',
-        )
+    if docker:
+        if image_user:
+            build_image = True
+            RUN(f'useradd -u {id.uid} -g {id.gid} -s /bin/bash {id.user}')
+        if image_group:
+            build_image = True
+            RUN(f'groupadd -o -g {id.gid} {id.group}')
         if sudo:
-            RUN('perl -pi -e "s/^%sudo(.*ALL=).*/%s\1(ALL) NOPASSWD: ALL/" /etc/sudoers' % id.user)
+            RUN(
+                'apt-get update',
+                'apt-get install -y sudo',
+                'perl -pi -e "s/^%%sudo(.*ALL=).*/%s\\1(ALL) NOPASSWD: ALL/" /etc/sudoers' % id.user,
+            )
 
     if build_image:
-        if docker:
-            run('docker','build','-t',name,'-f',tmp_dockerfile,cwd)
-            image = name
+        assert docker
+        file.build(name)
+        image = name
 
 # Determine user to run as (inside Docker container)
 user_args = []
