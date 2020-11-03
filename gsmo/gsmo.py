@@ -25,6 +25,7 @@ group = parser.add_mutually_exclusive_group()
 group.add_argument('-j','--jupyter',action='store_true',help="Run a jupyter server in the current directory")
 group.add_argument('-s','--shell',action='store_true',help="Open a /bin/bash shell in the container (instead of running a jupyter server)")
 parser.add_argument('-a','--apt',help='Comma-separated list of packages to apt-get install')
+parser.add_argument('-b','--build-arg',nargs='*',help='Comma-separated list of packages to apt-get install')
 parser.add_argument('--commit','--state',nargs='*',help='Paths to `git add` and commit after running')
 parser.add_argument('-C','--dir',help="Resolve paths (e.g. mounts) relative to this directory (default: current directory)")
 parser.add_argument('-d','--detach',action='store_true',help="When booting into Jupyter server mode, detach the container")
@@ -33,19 +34,22 @@ parser.add_argument('-D','--no-docker',dest='docker',default=True,action='store_
 parser.add_argument('--dst',help='Path inside Docker container to mount current directory/repo to (default: /src)')
 parser.add_argument('-e','--env',nargs='*',help='Env vars to set when running Docker container')
 parser.add_argument('-i','--image',help=f'Base docker image to build on (default: f{DEFAULT_IMAGE})')
-parser.add_argument('-g','--group',nargs='*',help='Groups to add user to in the Docker container')
+parser.add_argument('-I','--no-interactive',action='store_true',help="Don't run interactively / allocate a TTY (i.e. skip `-it` flags to `docker run`)")
+parser.add_argument('-G','--group',nargs='*',help='Groups to add user to when running the Docker container')
 parser.add_argument('-n','--name',help='Container name (defaults to directory basename)')
 parser.add_argument('-o','--out',help='Path or directory to write output notebook to (relative to `input` directory; default: "nbs")')
 parser.add_argument('-p','--pip',help='Comma-separated (or multi-arg) list of packages to pip install')
 parser.add_argument('-P','--port',nargs='*',help='Ports (or ranges) to expose from the container (if Jupyter server is being run, the first port in the first provided range will be used); can be passed multiple times and/or as comma-delimited lists')
 parser.add_argument('--rm','--remove-container',action='store_true',help="Remove Docker container after run (pass `--rm` to `docker run`)")
 parser.add_argument('-R','--skip-requirements-txt',action='store_true',help="Skip {reading,`pip install`ing} any requirements.txt that is present")
+parser.add_argument('--sudo',action='store_true',help="Ensure Docker image user has sudo privileges")
 parser.add_argument('-t','--tag',help='Comma-separated (or multi-arg) list of tags to add to built docker image')
-parser.add_argument('-I','--no-interactive',action='store_true',help="Don't run interactively / allocate a TTY (i.e. skip `-it` flags to `docker run`)")
+parser.add_argument('-u','--image-user',action='store_true',help="Create user (and groups) inside Docker image, at build time")
 parser.add_argument('-U','--root','--no-user',action='store_true',help="Run docker as root (instead of as the current system user)")
 parser.add_argument('-v','--mount',nargs='*',help='Paths to mount into Docker container; relative paths are accepted, and the destination can be omitted if it matches the src (relative to the current directory, e.g. "home" → "/home")')
 parser.add_argument('--missing-mounts',default='raise',choices=['raise','err','error','warn','ignore','ok',],help='Control behavior when any mount paths are nonexistent')
 parser.add_argument('--pip_mount',help='Optionally `pip install -e` a mounted directory inside the container before running the usual entrypoint script')
+parser.add_argument('-x','--run','--execute',help='Notebook to run (default: run.ipynb)')
 parser.add_argument('-y','--run-config-yaml-path',help='Path to a YAML file with configuration settings to pass through to the module being run; "run" mode only')
 parser.add_argument('-Y','--run-config-yaml-str',help='YAML string with configuration settings to pass through to the module being run; "run" mode only')
 
@@ -54,6 +58,7 @@ args = parser.parse_args()
 DEFAULT_CONFIG_STEMS = ['gsmo','config']
 CONFIG_XTNS = ['yaml','yml']
 DEFAULT_SRC_MOUNT_DIR = '/src'
+DEFAULT_RUN_NB = 'run.ipynb'
 
 config_paths = [
     f
@@ -184,6 +189,7 @@ tags = lists(get('tag'))
 name = get('name', default=basename(input))
 skip_requirements_txt = args.skip_requirements_txt
 root = get('root')
+image_user = get('image_user')
 
 jupyter = args.jupyter
 jupyter_src_port = jupyter_dst_port = None
@@ -249,33 +255,39 @@ else:
         ports = []
 
 
-with NamedTemporaryFile(dir='.', prefix='Dockerfile.') as f:
+from .util.unix_id import UnixId
+id = UnixId()
+
+from utz import docker
+from utz.use import use
+
+file = docker.File()
+with use(file):
     # If this becomes true, write out a fresh Dockerfile (to `tmp_dockerfile`) and build an image
     # based from it; otherwise, use an extant upstream image
     build_image = False
-    tmp_dockerfile = f.name
+    tmp_dockerfile = file.path
 
     dockerfile = join(cwd, 'Dockerfile')
     if exists(dockerfile):
         build_image = True
         copy(dockerfile, tmp_dockerfile)
 
-    def write(*lines, warn_on_no_docker=True):
-        global build_image
-        if not build_image:
-            build_image = True
-            write(f'FROM {base_image}')
+    def check(kind, warn_on_no_docker=True):
         if docker:
-            with open(tmp_dockerfile, 'a') as f:
-                for line in lines:
-                    f.write(f'{line}\n')
+            global build_image
+            if not build_image:
+                build_image = True
+                FROM(base_image)
         elif warn_on_no_docker:
-            stderr.write(f'Docker configs skipped in docker-less mode:\n')
-            for line in lines:
-                stderr.write('\t%s\n' % line)
+            stderr.write(f'Docker {kind} configs skipped in docker-less mode:\n')
 
     if apts:
-        write(f'RUN apt-get update && apt-get install -y {" ".join(apts)}')
+        check('apt')
+        RUN(
+            'apt-get update',
+            f'apt-get install -y {" ".join(apts)}'
+        )
 
     reqs_txt = join(cwd, 'requirements.txt')
     if exists(reqs_txt) and not skip_requirements_txt:
@@ -284,11 +296,28 @@ with NamedTemporaryFile(dir='.', prefix='Dockerfile.') as f:
 
     if pips:
         if docker:
-            write(f'RUN pip install {" ".join(pips)}', warn_on_no_docker=False)
+            RUN(f'pip install {" ".join(pips)}')
         else:
             import pip
             print(f'pip install {" ".join(pips)}')
             pip.main(['install'] + pips)
+
+    # ENV HOME /home/$user
+    # COPY home /home/$user
+    #
+    # RUN groupadd -o -g $gid $group
+    # RUN useradd -u $uid -g $gid -G sudo -s /bin/bash $user
+    #
+    # # Passwordless sudo for this user
+    # RUN perl -pi -e "s/^%sudo(.*ALL=).*/${user}\1(ALL) NOPASSWD: ALL/" /etc/sudoers'''
+
+    if image_user:
+        RUN(
+            f'groupadd -o -g {id.gid} {id.group}',
+            f'useradd -u {id.uid} -g {id.gid} -s /bin/bash {id.user}',
+        )
+        if sudo:
+            RUN('perl -pi -e "s/^%sudo(.*ALL=).*/%s\1(ALL) NOPASSWD: ALL/" /etc/sudoers' % id.user)
 
     if build_image:
         if docker:
@@ -323,6 +352,8 @@ if run_config:
     if jupyter or shell:
         raise ValueError(f'Run configs not supported in `jupyter`/`shell` modes')
 
+run_nb = get('run', DEFAULT_RUN_NB)
+
 if shell:
     # Launch Bash shell
     entrypoint = '/bin/bash'
@@ -341,7 +372,9 @@ elif jupyter:
         args += [ '--allow-root', ]
 else:
     entrypoint = 'gsmo-entrypoint'
-    args = [ 'run.ipynb', out, ]
+    if not exists(run_nb):
+        raise ValueError(f"Run notebook doesn't exist: {run_nb}")
+    args = [ run_nb, out, ]
 
 
 pip_mounts = lists(get('pip_mount'))
@@ -367,7 +400,7 @@ def get_git_id(k, fmt):
     return v
 
 # Get Git user name/email for propagating into image
-user = o(
+id = o(
     name  = get_git_id( 'name', '%an'),
     email = get_git_id('email', '%ae'),
 )
@@ -377,10 +410,10 @@ user = o(
 envs = {
     **envs,
    'HOME': '/home',
-   'GIT_AUTHOR_NAME'    : user.name,
-   'GIT_AUTHOR_EMAIL'   : user.email,
-   'GIT_COMMITTER_NAME' : user.name,
-   'GIT_COMMITTER_EMAIL': user.email,
+   'GIT_AUTHOR_NAME'    : id.name,
+   'GIT_AUTHOR_EMAIL'   : id.email,
+   'GIT_COMMITTER_NAME' : id.name,
+   'GIT_COMMITTER_EMAIL': id.email,
 }
 
 # Build Docker CLI args
