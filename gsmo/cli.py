@@ -6,7 +6,7 @@ class Arg:
 
 
 run_args = [
-    Arg('--commit',nargs='*',help='Paths to `git add` and commit after running'),
+    Arg('--commit',nargs='*',action='append',help='Paths to `git add` and commit after running'),
     Arg('-C','--dir',help="Resolve paths (incl. mounts) relative to this directory (default: current directory)"),
     Arg('-o','--out',help='Path or directory to write output notebook to (relative to `--dir` directory; default: "nbs")'),
     Arg('-x','--run','--execute',help='Notebook to run (default: run.ipynb)'),
