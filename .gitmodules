@@ -1,6 +1,6 @@
-[submodule "test/echo"]
-	path = example/echo
-	url = https://github.com/ryan-williams/echo_module.git
 [submodule "test/hailstone"]
 	path = example/hailstone
 	url = https://github.com/ryan-williams/hailstone_module.git
+[submodule "example/factors"]
+	path = example/factors
+	url = https://gitlab.com/gsmo/examples/factors.git
