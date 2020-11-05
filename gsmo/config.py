@@ -2,7 +2,62 @@
 from os.path import basename, exists, isfile, join, sep
 from pathlib import Path
 from sys import stderr
+from utz.collections import singleton
+from utz import o
 from utz.process import line
+
+
+DEFAULT_CONFIG_STEMS = ['gsmo','config']
+CONFIG_XTNS = ['yaml','yml']
+DEFAULT_SRC_MOUNT_DIR = '/src'
+DEFAULT_RUN_NB = 'run.ipynb'
+DEFAULT_NB_DIR = 'nbs'
+
+class Config:
+    def __init__(self, args):
+        self.args = args
+        config_paths = [
+            f
+            for stem in DEFAULT_CONFIG_STEMS
+            for xtn in CONFIG_XTNS
+            if exists(f := f'{stem}.{xtn}')
+        ]
+
+        if config_paths:
+            config_path = singleton(config_paths)
+            import yaml
+            with open(config_path,'r') as f:
+                config = o(yaml.safe_load(f))
+        else:
+            config = o()
+
+        self.config = config
+
+    def get(self, keys, default=None):
+        if isinstance(keys, str):
+            keys = [keys]
+
+        for k in keys:
+            if hasattr(self.args, k):
+                if (v := getattr(self.args, k)) is not None:
+                    return v
+
+        for k in keys:
+            if k in self.config:
+                print(f'Found config {k}')
+                return self.config[k]
+
+        return default
+
+
+def lists(args, sep=','):
+    if args is None:
+        return []
+
+    if isinstance(args, str):
+        args = args.split(sep)
+
+    return args
 
 
 def strs(config, *keys):

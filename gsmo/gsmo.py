@@ -16,104 +16,75 @@ version = get_version()
 DEFAULT_IMAGE = f'runsascoded/gsmo:{version}'
 DEFAULT_DIND_IMAGE = f'{DEFAULT_IMAGE}:dind_{version}'
 
-from .config import clean_group, clean_mount
+from .cli import Arg, run_args, load_run_config
+from .config import clean_group, clean_mount, lists, Config
 
 parser = ArgumentParser()
-parser.add_argument('input',nargs='?',help='Input directory containing run.ipynb (and optionally config.yaml, or other path specified by "-y"); defaults to current directory')
+parser.add_argument('input',nargs='?',help='Input directory containing run.ipynb (and optionally gsmo.yml, or other path specified by "-y"); defaults to current directory')
 
-group = parser.add_mutually_exclusive_group()
-group.add_argument('-j','--jupyter',action='store_true',help="Run a jupyter server in the current directory")
-group.add_argument('-s','--shell',action='store_true',help="Open a /bin/bash shell in the container (instead of running a jupyter server)")
-parser.add_argument('-a','--apt',help='Comma-separated list of packages to apt-get install')
-parser.add_argument('-b','--build-arg',nargs='*',help='Comma-separated list of packages to apt-get install')
-parser.add_argument('--commit','--state',nargs='*',help='Paths to `git add` and commit after running')
-parser.add_argument('-C','--dir',help="Resolve paths (e.g. mounts) relative to this directory (default: current directory)")
-parser.add_argument('-d','--detach',action='store_true',help="When booting into Jupyter server mode, detach the container")
-parser.add_argument('--dind',action='store_true',help="When set, mount /var/run/docker.sock in container (and default to a base image that contains docker installed)")
-parser.add_argument('-D','--no-docker',dest='docker',default=True,action='store_false',help="Run in the current shell instead of in Docker")
-parser.add_argument('--dst',help='Path inside Docker container to mount current directory/repo to (default: /src)')
-parser.add_argument('-e','--env',nargs='*',help='Env vars to set when running Docker container')
-parser.add_argument('-i','--image',help=f'Base docker image to build on (default: f{DEFAULT_IMAGE})')
-parser.add_argument('-I','--no-interactive',action='store_true',help="Don't run interactively / allocate a TTY (i.e. skip `-it` flags to `docker run`)")
-parser.add_argument('-g','--image-group',action='store_true',help='Create current group inside Docker image (at build time)')
-parser.add_argument('-G','--group',nargs='*',help='Groups to add user to when running the Docker container')
-parser.add_argument('-n','--name',help='Container name (defaults to directory basename)')
-parser.add_argument('-o','--out',help='Path or directory to write output notebook to (relative to `input` directory; default: "nbs")')
-parser.add_argument('-p','--pip',help='Comma-separated (or multi-arg) list of packages to pip install')
-parser.add_argument('-P','--port',nargs='*',help='Ports (or ranges) to expose from the container (if Jupyter server is being run, the first port in the first provided range will be used); can be passed multiple times and/or as comma-delimited lists')
-parser.add_argument('--rm','--remove-container',action='store_true',help="Remove Docker container after run (pass `--rm` to `docker run`)")
-parser.add_argument('-R','--skip-requirements-txt',action='store_true',help="Skip {reading,`pip install`ing} any requirements.txt that is present")
-parser.add_argument('--sudo',action='store_true',help="Ensure Docker image user has sudo privileges")
-parser.add_argument('-t','--tag',help='Comma-separated (or multi-arg) list of tags to add to built docker image')
-parser.add_argument('-u','--image-user',action='store_true',help="Create current user inside Docker image (at build time)")
-parser.add_argument('-U','--root','--no-user',action='store_true',help="Run docker as root (instead of as the current system user)")
-parser.add_argument('-v','--mount',nargs='*',help='Paths to mount into Docker container; relative paths are accepted, and the destination can be omitted if it matches the src (relative to the current directory, e.g. "home" → "/home")')
-parser.add_argument('--missing-mounts',default='raise',choices=['raise','err','error','warn','ignore','ok',],help='Control behavior when any mount paths are nonexistent')
-parser.add_argument('--pip_mount',help='Optionally `pip install -e` a mounted directory inside the container before running the usual entrypoint script')
-parser.add_argument('-x','--run','--execute',help='Notebook to run (default: run.ipynb)')
-parser.add_argument('-y','--run-config-yaml-path',help='Path to a YAML file with configuration settings to pass through to the module being run; "run" mode only')
-parser.add_argument('-Y','--run-config-yaml-str',help='YAML string with configuration settings to pass through to the module being run; "run" mode only')
-
-args = parser.parse_args()
-
-DEFAULT_CONFIG_STEMS = ['gsmo','config']
-CONFIG_XTNS = ['yaml','yml']
-DEFAULT_SRC_MOUNT_DIR = '/src'
-DEFAULT_RUN_NB = 'run.ipynb'
-
-config_paths = [
-    f
-    for stem in DEFAULT_CONFIG_STEMS
-    for xtn in CONFIG_XTNS
-    if exists(f := f'{stem}.{xtn}')
+jupyter_args = [
+    Arg('-d','--detach',action='store_true',help="When booting into Jupyter server mode, detach the container"),
+    Arg('-D','--no-docker',dest='docker',default=True,action='store_false',help="Run in the current shell instead of in Docker"),
+    Arg('-O','--no-open',action='store_true',help='Skip opening Jupyter notebook server in browser'),
+    Arg('-s','--shell',action='store_true',help="Open a /bin/bash shell in the container (instead of running a jupyter server)"),  # TODO: implement
 ]
 
-run_config = {}
-if (run_config_yaml_path := args.run_config_yaml_path):
-    import yaml
-    with open(run_config_yaml_path,'r') as f:
-        run_config = yaml.safe_load(f)
+docker_args = [
+    Arg('-a','--apt',help='Comma-separated list of packages to apt-get install'),
+    Arg('-b','--build-arg',nargs='*',help='Comma-separated list of packages to apt-get install'),
+    Arg('--dind',action='store_true',help="When set, mount /var/run/docker.sock in container (and default to a base image that contains docker installed)"),
+    Arg('--dst',help='Path inside Docker container to mount current directory/repo to (default: /src)'),
+    Arg('-e','--env',nargs='*',help='Environment variables to pass to Docker container'),
+    Arg('-E','--env-file',help="File with environment variables to pass to Docker container"),
+    Arg('-i','--image',help=f'Base docker image to build on (default: f{DEFAULT_IMAGE})'),
+    Arg('-I','--no-interactive',action='store_true',help="Don't run interactively / allocate a TTY (i.e. skip `-it` flags to `docker run`)"),
+    Arg('-g','--image-group',action='store_true',help='Create current group inside Docker image (at build time)'),
+    Arg('-G','--group',nargs='*',help='Groups to add user to when running the Docker container'),
+    Arg('-n','--name',help='Container name (defaults to directory basename)'),
+    Arg('-p','--pip',help='Comma-separated (or multi-arg) list of packages to pip install'),
+    Arg('-P','--port',nargs='*',help='Ports (or ranges) to expose from the container (if Jupyter server is being run, the first port in the first provided range will be used); can be passed multiple times and/or as comma-delimited lists'),
+    Arg('--rm','--remove-container',action='store_true',help="Remove Docker container after run (pass `--rm` to `docker run`)"),
+    Arg('-R','--skip-requirements-txt',action='store_true',help="Skip {reading,`pip install`ing} any requirements.txt that is present"),
+    Arg('--sudo',action='store_true',help="Ensure Docker image user has sudo privileges"),
+    Arg('-t','--tag',help='Comma-separated (or multi-arg) list of tags to add to built docker image'),
+    Arg('-u','--image-user',action='store_true',help="Create current user inside Docker image (at build time)"),
+    Arg('-U','--root','--no-user',action='store_true',help="Run docker as root (instead of as the current system user)"),
+    Arg('-v','--mount',nargs='*',help='Paths to mount into Docker container; relative paths are accepted, and the destination can be omitted if it matches the src (relative to the current directory, e.g. "home" → "/home")'),
+    Arg('--missing-mounts',default='raise',choices=['raise','err','error','warn','ignore','ok',],help='Control behavior when any mount paths are nonexistent'),
+    Arg('--pip_mount',help='Optionally `pip install -e` a mounted directory inside the container before running the usual entrypoint script'),
+]
 
-if (run_config_yaml_str := args.run_config_yaml_str):
-    import yaml
-    run_config = o.merge(run_config, yaml.safe_load(run_config_yaml_str))
+subparsers = parser.add_subparsers()
 
-if config_paths:
-    config_path = singleton(config_paths)
-    import yaml
-    with open(config_path,'r') as f:
-        config = o(yaml.safe_load(f))
-else:
-    config = o()
+jupyter_parser = subparsers.add_parser('jupyter', help='Boot (and attempt to open in browser) a Jupyter server running in a Docker image built for this module')
+jupyter_parser.set_defaults(cmd='jupyter')
 
-if (config_yaml_str := args.run_config_yaml_str):
-    config_yaml = yaml.safe_load(config_yaml_str)
-    config = o.merge(config, config_yaml)
+run_parser = subparsers.add_parser('run', help='Run this module in a purpose-built Docker image')
+run_parser.set_defaults(cmd='run')
 
-def lists(args, sep=','):
-    if args is None:
-        return []
+shell_parser = subparsers.add_parser('shell', help='Boot a Bash shell in a Docker image built for this module')
+shell_parser.set_defaults(cmd='shell')
 
-    if isinstance(args, str):
-        args = args.split(sep)
 
-    return args
+for arg in docker_args:
+    parser.add_argument(*arg.args, **arg.kwargs)
 
-def get(keys, default=None):
-    if isinstance(keys, str):
-        keys = [keys]
+for arg in jupyter_args:
+    jupyter_parser.add_argument(*arg.args, **arg.kwargs)
 
-    for k in keys:
-        if hasattr(args, k):
-            if (v := getattr(args, k)) is not None:
-                return v
+for arg in run_args:
+    run_parser.add_argument(*arg.args, **arg.kwargs)
 
-    for k in keys:
-        if k in config:
-            print(f'Found config {k}')
-            return config[k]
+args = parser.parse_args()
+jupyter = args.cmd == 'jupyter'
+shell = args.cmd == 'shell'
 
-    return default
+config = Config(args)
+get = partial(Config.get, config)
+
+
+run_config = load_run_config(args)
+
 
 dir = args.dir
 if dir:
@@ -127,6 +98,10 @@ input = args.input or cwd
 
 dst = get('dst',DEFAULT_SRC_MOUNT_DIR)
 src = cwd
+
+# Detect when we are running a git submodule, and adjust src mount to include the containing Git repository (and Git
+# directory, which will contain this module's Git dir under its .git/modules); this is necessary for Git operations
+# (specifically commits) to work as expected inside the container
 git_dir = join(src, '.git')
 if isfile(git_dir):
     with open(git_dir,'r') as f:
@@ -150,6 +125,7 @@ if isfile(git_dir):
 else:
     workdir = dst
 
+# Load env var configs
 envs = get('env', [])
 if isinstance(envs, (list, tuple)):
     envs = dict([
@@ -158,6 +134,8 @@ if isinstance(envs, (list, tuple)):
     ])
 elif envs is not None and not isinstance(envs, dict):
     raise ValueError(f'Unexpected env dict: {envs}')
+
+env_file = get('env_file')
 
 commit = lists(get('commit'))
 
@@ -194,17 +172,24 @@ image_user = get('image_user')
 image_group = get('image_group')
 sudo = get('sudo')
 
-jupyter = args.jupyter
+# jupyter = args.jupyter
 jupyter_src_port = jupyter_dst_port = None
 
-detach = args.detach
-if detach:
-    if not jupyter:
-        raise ValueError(f'-d/--detach only applicable to -j/--jupyter mode')
+if args.no_open:
+    # if not jupyter:
+    #     raise ValueError(f'-O/--no-open only applicable to -j/--jupyter mode')
+    jupyter_open = False
+else:
+    jupyter_open = True
 
-shell = args.shell
-if shell and not docker:
-    raise ValueError('`shell` mode not supported when Docker mode is disabled')
+detach = args.detach
+# if detach:
+#     if not jupyter:
+#         raise ValueError(f'-d/--detach only applicable to -j/--jupyter mode')
+
+# shell = args.shell
+# if shell and not docker:
+#     raise ValueError('`shell` mode not supported when Docker mode is disabled')
 
 
 if ports:
@@ -345,9 +330,9 @@ if rm:
     assert docker
     flags += ['--rm']
 
-if run_config:
-    if jupyter or shell:
-        raise ValueError(f'Run configs not supported in `jupyter`/`shell` modes')
+# if run_config:
+#     if jupyter or shell:
+#         raise ValueError(f'Run configs not supported in `jupyter`/`shell` modes')
 
 run_nb = get('run', DEFAULT_RUN_NB)
 
@@ -415,6 +400,7 @@ envs = {
 
 # Build Docker CLI args
 env_args = [ [ '-e', f'{k}={v}' ] for k, v in envs.items() ]
+if env_file: env_args += [ '--env-file', env_file ]
 mount_args = [ [ '-v', mount ] for mount in mounts ]
 port_args = [ [ '-p', port ] for port in ports ]
 group_args = [ [ '--group-add', group ] for group in groups ]
@@ -460,7 +446,8 @@ def main():
                         raise RuntimeError(f'Jupyter running on unexpected port {m["port"]} (!= {jupyter_dst_port})')
                     token = m['token']
                     url = f'http://127.0.0.1:{jupyter_src_port}?token={token}'
-                    run('open',url)
+                    if jupyter_open:
+                        run('open',url)
                     if not detach:
                         run('docker','attach',name)
                     break
@@ -476,8 +463,8 @@ def main():
                 all_args,
             )
     else:
-        if not jupyter:
-            raise ValueError(f'In non-docker mode, only -j/--jupyter mode is supported')
+        # if not jupyter:
+        #     raise ValueError(f'In non-docker mode, only -j/--jupyter mode is supported')
         if jupyter_src_port != jupyter_dst_port:
             raise ValueError(f'Mismatching jupyter ports in non-docker mode: {jupyter_src_port} != {jupyter_dst_port}')
         jupyter_port = jupyter_src_port
