@@ -43,10 +43,21 @@ def test_hailstone():
 
 
 def test_factors():
-    with example('factors', ref='94a8c5c'):
-        run('gsmo','-I','-i','runsascoded/gsmo','run',)
+    with example('factors', ref='876c95c'):
+        run('gsmo','-I','run',)
         tree = Repo().commit().tree
-        # assert tree.hexsha == 'cd94100b5af964ee34ec469ecbf992e4e1fb7a76'
         assert tree['graph.png'].hexsha == '1ed114e1dd88d516ca749e516d24ef1d28fdb0de'
         assert tree['primes.png'].hexsha == '5189952fe9bcfb9f196b55bde9f6cc119b842017'
-        assert tree['ints.parquet'].hexsha == ''
+        assert tree['ints.parquet'].hexsha == '859a019cfa004fd4bf6d93789e47c85f167a1d5d'
+
+        run('gsmo','-I','-i','runsascoded/gsmo','run','-y','limit: 50')
+        tree = Repo().commit().tree
+        assert tree['graph.png'].hexsha == '6e432cd84a537648ec6559719c74e1b3021c707c'
+        assert tree['primes.png'].hexsha == '107debbdfe8ae9c146d99ca97a5563201e0f8f22'
+        assert tree['ints.parquet'].hexsha == '79ea92b9788a7424afc84674179db1b39c371111'
+
+        run('gsmo','-I','-i','runsascoded/gsmo','run','-y','limit: 50')
+        tree = Repo().commit().tree
+        assert tree['graph.png'].hexsha == '6e432cd84a537648ec6559719c74e1b3021c707c'
+        assert tree['primes.png'].hexsha == '107debbdfe8ae9c146d99ca97a5563201e0f8f22'
+        assert tree['ints.parquet'].hexsha == '79ea92b9788a7424afc84674179db1b39c371111'

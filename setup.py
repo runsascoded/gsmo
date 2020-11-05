@@ -2,8 +2,15 @@ from utz.setup import setup
 
 setup(
     install_requires=[
+        'pyyaml',
         'utz[setup]>=0.0.28',
     ],
+    extras_require={
+        'test': [
+            'GitPython',
+            'pytest==6.0.1',
+        ],
+    },
     url="https://github.com/runsascoded/gsmo",
     entry_points={
         'console_scripts': [
