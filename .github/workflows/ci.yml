@@ -9,6 +9,9 @@ jobs:
         with:
           ref: ${{ github.head_ref }}
           submodules: true
+      - name: Fetch example submodule
+        run: |
+          cd example/factors && git fetch --unshallow origin
       - name: Set up Python
         uses: actions/setup-python@v2
         with:
