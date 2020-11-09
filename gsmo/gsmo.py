@@ -242,7 +242,7 @@ def main():
     from utz import docker
     from utz.use import use
 
-    file = docker.File()
+    file = docker.File(dir=getcwd())
     with use(file):
         # If this becomes true, write out a fresh Dockerfile (to `tmp_dockerfile`) and build an image
         # based from it; otherwise, use an extant upstream image
@@ -255,15 +255,6 @@ def main():
             copy(dockerfile, tmp_dockerfile)
         else:
             FROM(base_image)
-
-        if image_envs:
-            build_image = True
-            ENV(**image_envs)
-
-        if image_env_file:
-            build_image = True
-            with open(image_env_file,'r') as f:
-                ENV(*[ l.strip() for l in f.readlines() ])
 
         if apts:
             if docker:
@@ -289,6 +280,15 @@ def main():
                 print(f'pip install {" ".join(pips)}')
                 pip.main(['install'] + pips)
 
+        if image_envs:
+            build_image = True
+            ENV(**image_envs)
+
+        if image_env_file:
+            build_image = True
+            with open(image_env_file,'r') as f:
+                ENV(*[ l.strip() for l in f.readlines() ])
+
         if docker:
             if image_user or image_group or sudo:
                 cmds = []
@@ -313,6 +313,9 @@ def main():
             else:
                 file.build(name)
                 image = name
+                if tags:
+                    for tag in tags:
+                        run('docker','tag',name,f'{name}:{tag}')
 
     # Determine user to run as (inside Docker container)
     user_args = []
