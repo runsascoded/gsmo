@@ -1,6 +1,5 @@
 
-from git import Repo
-from utz.imports import *
+from utz import *
 
 
 @contextmanager
@@ -14,10 +13,15 @@ def example(name, ref=None):
                 run('git','reset','--hard',ref)
             yield
 
+args = ['-I']
+if 'GSMO_IMAGE' in env:
+    args += ['-i',env['GSMO_IMAGE']]
+
+
 def test_hailstone():
     with example('hailstone'):
         def step(value):
-            run('gsmo','-I','run',)
+            run('gsmo',*args,'run',)
             if value == 1:
                 return
             if value % 2 == 0:
@@ -44,7 +48,7 @@ def test_hailstone():
 
 def test_factors():
     with example('factors', ref='876c95c'):
-        run('gsmo','-I','run',)
+        run('gsmo',*args,'run',)
         tree = Repo().commit().tree
         assert tree['graph.png'].hexsha == '1ed114e1dd88d516ca749e516d24ef1d28fdb0de'
         assert tree['primes.png'].hexsha == '5189952fe9bcfb9f196b55bde9f6cc119b842017'
