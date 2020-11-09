@@ -1,12 +1,17 @@
 
 from os.path import basename, exists, isfile, join, sep
 from pathlib import Path
-from sys import stderr
 from utz.collections import singleton
 from utz import o
 from utz.process import line
+from sys import stderr
 
+from .version import get_version
+version = get_version()
 
+DEFAULT_IMAGE = f'runsascoded/gsmo:{version}'
+DEFAULT_DIND_IMAGE = f'{DEFAULT_IMAGE}:dind_{version}'
+IMAGE_HOME = '/home'
 DEFAULT_CONFIG_STEMS = ['gsmo','config']
 CONFIG_XTNS = ['yaml','yml']
 DEFAULT_SRC_MOUNT_DIR = '/src'

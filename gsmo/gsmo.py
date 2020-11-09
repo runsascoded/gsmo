@@ -2,14 +2,8 @@
 
 from utz import *
 
-from .version import get_version
-version = get_version()
-
-DEFAULT_IMAGE = f'runsascoded/gsmo:{version}'
-DEFAULT_DIND_IMAGE = f'{DEFAULT_IMAGE}:dind_{version}'
-
 from .cli import Arg, run_args, load_run_config
-from .config import clean_group, clean_mount, lists, Config, DEFAULT_SRC_MOUNT_DIR, DEFAULT_RUN_NB
+from .config import clean_group, clean_mount, lists, Config, DEFAULT_SRC_MOUNT_DIR, DEFAULT_RUN_NB, IMAGE_HOME, DEFAULT_IMAGE, DEFAULT_DIND_IMAGE
 
 def main():
     parser = ArgumentParser()
@@ -27,8 +21,10 @@ def main():
         Arg('-b','--build-arg',nargs='*',help='Comma-separated list of packages to apt-get install'),
         Arg('--dind',default=None,action='store_true',help="When set, mount /var/run/docker.sock in container (and default to a base image that contains docker installed)"),
         Arg('--dst',help='Path inside Docker container to mount current directory/repo to (default: /src)'),
-        Arg('-e','--env',nargs='*',help='Environment variables to pass to Docker container'),
-        Arg('-E','--env-file',help="File with environment variables to pass to Docker container"),
+        Arg('-e','--env','--image-env',nargs='*',help='Environment variables to set in Docker image (at build time)'),
+        Arg('--env-file','--ef','--image-env-file',nargs='*',help='Files containing environment variables to set in Docker image (at build time)'),
+        Arg('-E','--container-env',nargs='*',help='Environment variables to pass to Docker container (at run time)'),
+        Arg('--container-env-file','--Ef',nargs='*',help='Files containing environment variables to pass to Docker container (at run time)'),
         Arg('-i','--image',help=f'Base docker image to build on (default: f{DEFAULT_IMAGE})'),
         Arg('-I','--no-interactive',default=None,action='store_true',help="Don't run interactively / allocate a TTY (i.e. skip `-it` flags to `docker run`)"),
         Arg('-g','--image-group',default=None,action='store_true',help='Create current group inside Docker image (at build time)'),
@@ -125,16 +121,28 @@ def main():
         workdir = dst
 
     # Load env var configs
-    envs = get('env', [])
-    if isinstance(envs, (list, tuple)):
-        envs = dict([
+    image_envs = get('env', [])
+    if isinstance(image_envs, (list, tuple)):
+        image_envs = dict([
             env.split('=', 1)
-            for env in envs
+            for env in image_envs
         ])
-    elif envs is not None and not isinstance(envs, dict):
-        raise ValueError(f'Unexpected env dict: {envs}')
+    elif image_envs is not None and not isinstance(image_envs, dict):
+        raise ValueError(f'Unexpected env dict: {image_envs}')
 
-    env_file = get('env_file')
+    image_env_file = get('env_file')
+
+    # Load env var configs
+    container_envs = get('container_env', [])
+    if isinstance(container_envs, (list, tuple)):
+        container_envs = dict([
+            env.split('=', 1)
+            for env in container_envs
+        ])
+    elif container_envs is not None and not isinstance(container_envs, dict):
+        raise ValueError(f'Unexpected env dict: {container_envs}')
+
+    container_env_file = get('container_env_file')
 
     commit = lists(get('commit'))
 
@@ -248,6 +256,15 @@ def main():
         else:
             FROM(base_image)
 
+        if image_envs:
+            build_image = True
+            ENV(**image_envs)
+
+        if image_env_file:
+            build_image = True
+            with open(image_env_file,'r') as f:
+                ENV(*[ l.strip() for l in f.readlines() ])
+
         if apts:
             if docker:
                 build_image = True
@@ -275,7 +292,7 @@ def main():
         if docker:
             if image_user or image_group or sudo:
                 cmds = []
-                if image_user: cmds += [f'useradd -u {id.uid} -g {id.gid} -s /bin/bash {id.user}']
+                if image_user: cmds += [f'useradd -u {id.uid} -g {id.gid} -s /bin/bash -m -d {IMAGE_HOME} {id.user}']
                 if image_group: cmds += [f'groupadd -o -g {id.gid} {id.group}']
                 if sudo: cmds += [
                     'apt-get update',
@@ -376,9 +393,8 @@ def main():
     )
 
     # Set up author info for git committing
-    envs = {
-        **envs,
-       'HOME': '/home',
+    container_envs = {
+        **container_envs,
        'GIT_AUTHOR_NAME'    : id.name,
        'GIT_AUTHOR_EMAIL'   : id.email,
        'GIT_COMMITTER_NAME' : id.name,
@@ -386,8 +402,8 @@ def main():
     }
 
     # Build Docker CLI args
-    env_args = [ [ '-e', f'{k}={v}' ] for k, v in envs.items() ]
-    if env_file: env_args += [ '--env-file', env_file ]
+    env_args = [ [ '-e', f'{k}={v}' ] for k, v in container_envs.items() ]
+    if container_env_file: env_args += [ '--env-file', container_env_file ]
     mount_args = [ [ '-v', mount ] for mount in mounts ]
     port_args = [ [ '-p', port ] for port in ports ]
     group_args = [ [ '--group-add', group ] for group in groups ]

@@ -2,6 +2,8 @@
 
 from utz import *
 
+from ..config import IMAGE_HOME
+
 VERSION_TAG_RGX = r'^v(?P<version>\d+\.\d+\.\d+)$'
 GSMO_DIR = '/gsmo'
 GH_REPO = 'runsascoded/gsmo'
@@ -98,15 +100,16 @@ def build(
 
             WORKDIR(); LN()
 
-            NOTE("Create an open directory for pointing anonymouse users' $HOME at (e.g. `-e HOME=/home -u `id -u`:`id -g` `)")
-            RUN('chmod ugo+rwx /home')
+            NOTE("Create a $HOME dir (independent of user name; sometimes user is anonymous, e.g. via `-u $(id -u):$(id -g)`)")
+            ENV(HOME=IMAGE_HOME)
+            RUN(f'chmod ugo+rwx {IMAGE_HOME}')
 
             NOTE('Simple .bashrc for anonymous users that just sources /root/.bashrc')
-            COPY('home/.bashrc','/home/.bashrc')
+            COPY('home/.bashrc',f'{IMAGE_HOME}/.bashrc')
             NOTE('Make sure /root/.bashrc is world-accessible')
             RUN('chmod o+rx /root')
             LN()
-            RUN('pip install --upgrade --no-cache utz[setup]==0.0.29')
+            RUN('pip install --upgrade --no-cache utz[setup]==0.0.30')
             LN()
             ENTRYPOINT([ "gsmo-entrypoint", "/src" ])
             if embed == 'clone':
@@ -195,7 +198,7 @@ def main():
     tokens = parse_dict('token')
     usernames = parse_dict('username')
 
-    docker_dir = dirname(__file__)
+    docker_dir='docker'
     chdir(docker_dir)
 
     build_kwargs = dict(
