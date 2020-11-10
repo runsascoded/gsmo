@@ -292,7 +292,7 @@ def main():
         if docker:
             if image_user or image_group or sudo:
                 cmds = []
-                if image_group: cmds += [f'groupadd -o -g {id.gid} {id.group}']
+                if image_group: cmds += [f'groupadd -f -o -g {id.gid} {id.group}']
                 if image_user: cmds += [f'useradd -u {id.uid} -g {id.gid} -s /bin/bash -m -d {IMAGE_HOME} {id.user}']
                 if sudo: cmds += [
                     'apt-get update',
@@ -301,6 +301,7 @@ def main():
                 ]
                 build_image = True
                 RUN(*cmds)
+                USER(id.uid, id.gid)
 
         if build_image:
             assert docker
