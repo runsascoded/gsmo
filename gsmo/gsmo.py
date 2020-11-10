@@ -242,7 +242,7 @@ def main():
     from utz import docker
     from utz.use import use
 
-    file = docker.File(dir=getcwd())
+    file = docker.File()
     with use(file):
         # If this becomes true, write out a fresh Dockerfile (to `tmp_dockerfile`) and build an image
         # based from it; otherwise, use an extant upstream image

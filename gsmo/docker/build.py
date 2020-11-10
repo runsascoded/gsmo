@@ -109,7 +109,7 @@ def build(
             NOTE('Make sure /root/.bashrc is world-accessible')
             RUN('chmod o+rx /root')
             LN()
-            RUN('pip install --upgrade --no-cache utz[setup]==0.0.31')
+            RUN('pip install --upgrade --no-cache utz[setup]==0.0.32')
             LN()
             ENTRYPOINT([ "gsmo-entrypoint", "/src" ])
             if embed == 'clone':
