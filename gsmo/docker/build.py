@@ -124,7 +124,10 @@ def build(
             elif embed == 'copy':
                 COPY('.',GSMO_DIR, dir=None)
                 WORKDIR(GSMO_DIR)
-                RUN('git clean -fdx')
+                RUN(
+                    'git clean -fdx',
+                    f'chmod -R go+rx {GSMO_DIR}',
+                )
                 WORKDIR()
             else:
                 raise ValueError('Invalid "embed" value: %s; choices: {clone,copy}' % embed)
