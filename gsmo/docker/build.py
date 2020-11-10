@@ -58,6 +58,7 @@ def build(
                 'etc/pip.conf','etc/.gitignore','etc/gitconfig',
                 '/etc/',
             )
+            RUN('chmod o+rx /etc/pip.conf /etc/.gitignore /etc/gitconfig')
             LN()
             RUN(
                 'echo "deb http://ftp.us.debian.org/debian testing main" >> /etc/apt/sources.list',
@@ -96,18 +97,18 @@ def build(
                 'chmod u+x _rc',
                 './_rc -b server runsascoded/.rc',
             )
-            COPY('usr/local/etc/jupyter/nbconfig/notebook.json','/usr/local/etc/jupyter/nbconfig/'); LN()
+            COPY('usr/local/etc/jupyter/nbconfig/notebook.json','/usr/local/etc/jupyter/nbconfig/')
+            RUN('chmod o+rx /usr/local/etc/jupyter/nbconfig/ /root')
+            LN()
 
             WORKDIR(); LN()
 
             NOTE("Create a $HOME dir (independent of user name; sometimes user is anonymous, e.g. via `-u $(id -u):$(id -g)`)")
             ENV(HOME=IMAGE_HOME)
-            RUN(f'chmod ugo+rwx {IMAGE_HOME}')
+            RUN(f'chmod ug+rwx {IMAGE_HOME}')
 
             NOTE('Simple .bashrc for anonymous users that just sources /root/.bashrc')
             COPY('home/.bashrc',f'{IMAGE_HOME}/.bashrc')
-            NOTE('Make sure /root/.bashrc is world-accessible')
-            RUN('chmod o+rx /root')
             LN()
             RUN('pip install --upgrade --no-cache utz[setup]==0.0.32')
             LN()
