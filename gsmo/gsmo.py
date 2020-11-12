@@ -319,7 +319,7 @@ def main():
                     print(f.read())
                 exit(0)
             else:
-                file.build(name)
+                file.build(name, closed_ok=True)
                 image = name
                 if tags:
                     for tag in tags:

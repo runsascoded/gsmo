@@ -37,6 +37,6 @@ COPY home/.bashrc /home/.bashrc
 # Make sure /root/.bashrc is world-accessible
 RUN chmod o+rx /root
 
-RUN pip install --upgrade --no-cache utz[setup]>=0.0.32
+RUN pip install --upgrade --no-cache utz[setup]>=0.0.33
 
 ENTRYPOINT [ "gsmo-entrypoint", "/src" ]
