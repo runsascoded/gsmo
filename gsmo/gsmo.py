@@ -29,6 +29,7 @@ def main():
         Arg('-I','--no-interactive',default=None,action='store_true',help="Don't run interactively / allocate a TTY (i.e. skip `-it` flags to `docker run`)"),
         Arg('-g','--image-group',default=None,action='store_true',help='Create current group inside Docker image (at build time)'),
         Arg('-G','--group',nargs='*',help='Groups to add user to when running the Docker container'),
+        Arg('-M','--missing-paths',default=0,action='count',help='Relax checking of paths (for propagating mounts and groups into Docker): 1x ⟹ warn, 2x ⟹ ignore'),
         Arg('-n','--dry-run',action='count',default=0,help="Prepare and print run cmd (including building Docker image), but don't execute it. If passed twice, stop before building Docker image"),
         Arg('--name',help='Container name (defaults to directory basename)'),
         Arg('-p','--pip',help='Comma-separated (or multi-arg) list of packages to pip install'),
@@ -40,7 +41,6 @@ def main():
         Arg('-u','--image-user',default=None,action='store_true',help="Create current user inside Docker image (at build time)"),
         Arg('-U','--root','--no-user',default=None,action='store_true',help="Run docker as root (instead of as the current system user)"),
         Arg('-v','--mount',nargs='*',help='Paths to mount into Docker container; relative paths are accepted, and the destination can be omitted if it matches the src (relative to the current directory, e.g. "home" → "/home")'),
-        Arg('--missing-mounts',default='raise',choices=['raise','err','error','warn','ignore','ok',],help='Control behavior when any mount paths are nonexistent'),
         Arg('--pip_mount',help='Optionally `pip install -e` a mounted directory inside the container before running the usual entrypoint script'),
     ]
 
@@ -146,14 +146,21 @@ def main():
 
     commit = lists(get('commit'))
 
+    missing_paths = get('missing_paths')
+    if missing_paths == 1:
+        from .err import WARN
+        missing_paths = WARN
+    elif missing_paths == 2:
+        from .err import OK
+        missing_paths = OK
+
     groups = lists(get('group'))
-    groups = [ clean_group(group) for group in groups ]
+    groups = [ g for group in groups if (g := clean_group(group, err=missing_paths)) ]
 
     out = get('out') or 'nbs'
 
     mounts = lists(get('mount', []))
-    missing_mounts = get('missing_mounts')
-    mounts = [ m for mount in mounts if (m := clean_mount(mount, missing_mount=missing_mounts)) ]
+    mounts = [ m for mount in mounts if (m := clean_mount(mount, err=missing_paths)) ]
     mounts += [ f'{src}:{dst}', ]
 
     dind = get('dind')

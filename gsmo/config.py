@@ -6,6 +6,7 @@ from utz import o
 from utz.process import line
 from sys import stderr
 
+from .err import OK, RAISE, WARN
 from .version import get_version
 version = get_version()
 
@@ -92,7 +93,7 @@ def get_name(config):
     return Path.cwd().name
 
 
-def clean_mount(mount, missing_mount='raise'):
+def clean_mount(mount, err=RAISE):
     pieces = mount.split(':')
     if len(pieces) == 1:
         src = pieces[0]
@@ -111,18 +112,28 @@ def clean_mount(mount, missing_mount='raise'):
         dst = join(dst, basename(src))
     if not exists(src):
         msg = f"Mount src doesn't exist: {src}"
-        if missing_mount in ['raise','err','error']:
+        if err == RAISE:
             raise ValueError(msg)
-        if missing_mount == 'warn':
+        if err == WARN:
             stderr.write('%s\n' % msg)
         else:
-            assert missing_mount in ('ignore','ok')
+            assert err == OK
         return None
     return '%s:%s' % (src, dst)
 
 
-def clean_group(group):
+def clean_group(group, err=RAISE):
     if exists(group):
         return line('stat','-c','%g',group)
     else:
-        return line('id','-g',group)
+        warn = False
+        if err == RAISE:
+            err_ok = False
+        else:
+            err_ok = True
+            if err == WARN:
+                warn = True
+        ln = line('id','-g',group, err_ok=err_ok)
+        if ln is None and warn:
+            stderr.write('No group found for %s\n' % group)
+        return ln
