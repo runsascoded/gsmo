@@ -172,7 +172,7 @@ def main():
     base_image = get('image', default_image)
     image = base_image
 
-    docker = get('docker', True)
+    use_docker = get('docker', True)
     rm = get('remove_container')
 
     ports = lists(get('port'))
@@ -264,7 +264,7 @@ def main():
             FROM(base_image)
 
         if apts:
-            if docker:
+            if use_docker:
                 build_image = True
                 RUN(
                     'apt-get update',
@@ -279,7 +279,7 @@ def main():
                 pips += [ line.rstrip('\n') for line in f.readlines() if line ]
 
         if pips:
-            if docker:
+            if use_docker:
                 build_image = True
                 RUN(f'pip install {" ".join(pips)}')
             else:
@@ -296,7 +296,7 @@ def main():
             with open(image_env_file,'r') as f:
                 ENV(*[ l.strip() for l in f.readlines() ])
 
-        if docker:
+        if use_docker:
             if image_user or image_group or sudo:
                 cmds = []
                 if image_group: cmds += [f'groupadd -f -o -g {id.gid} {id.group}']
@@ -318,7 +318,7 @@ def main():
                         USER(id.uid)
 
         if build_image:
-            assert docker
+            assert use_docker
             if dry_run == 2:
                 print('Exiting before building Docker image:')
                 file.close(closed_ok=True)
@@ -343,7 +343,7 @@ def main():
             user_args = [ '-u', f'{uid}:{gid}' ]
 
     # Remove any existing container
-    if docker:
+    if use_docker:
         if check('docker','container','inspect',name):
             run('docker','container','rm',name)
 
@@ -353,7 +353,7 @@ def main():
     else:
         flags = []
     if rm:
-        assert docker
+        assert use_docker
         flags += ['--rm']
 
     run_nb = get('run', DEFAULT_RUN_NB)
@@ -440,7 +440,7 @@ def main():
         [image] + \
         args
 
-    if docker:
+    if use_docker:
         if jupyter_mode and check('which', 'open'):
             # 1. run docker container in detached mode
             # 2. parse+open jupyter token URL in browser (try every 1s)
