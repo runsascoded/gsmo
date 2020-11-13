@@ -66,7 +66,6 @@ def main():
 
     args = parser.parse_args()
     jupyter_mode = shell_mode = run_mode = False
-    print(f'args: {args}')
     cmd = getattr(args, 'cmd', None)
     if cmd =='jupyter':
         jupyter_mode = True
@@ -77,9 +76,6 @@ def main():
     else:
         raise ValueError(f'Unknown cmd: {cmd}')
 
-    config = Config(args)
-    get = partial(Config.get, config)
-
     if run_mode:
         run_config = load_run_config(args)
 
@@ -88,8 +84,14 @@ def main():
             print(f'Running in: {dir}')
             chdir(dir)
 
+    input = args.input
+    if input:
+        chdir(input)
+
     cwd = getcwd()
-    input = args.input or cwd
+
+    config = Config(args)
+    get = partial(Config.get, config)
 
     dst = get('dst',DEFAULT_SRC_MOUNT_DIR)
     src = cwd
@@ -179,7 +181,7 @@ def main():
     apts = lists(get('apt'))
     pips = lists(get('pip'))
     tags = lists(get('tag'))
-    name = get('name', default=basename(input))
+    name = get('name', default=basename(cwd))
     skip_requirements_txt = args.skip_requirements_txt
     root = get('root')
     image_user = get('image_user')
