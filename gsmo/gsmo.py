@@ -463,7 +463,10 @@ def main():
                         token = m['token']
                         url = f'http://127.0.0.1:{jupyter_src_port}?token={token}'
                         if jupyter_open:
-                            run('open',url)
+                            try:
+                                run('open',url)
+                            except CalledProcessError:
+                                stderr.write('Failed to open %s\n' % url)
                         if shell:
                             run('docker','exec','-it',name,'/usr/bin/env','bash')
                         else:
