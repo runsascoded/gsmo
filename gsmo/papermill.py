@@ -162,13 +162,13 @@ def execute(
                 [
                     f'Failed: {repr(exc)}',
                     '',
-                    print(''.join(
+                    ''.join(
                         format_exception(
                             etype=type(exc),
                             value=exc,
                             tb=exc.__traceback__,
                         )
-                    )),
+                    ),
                 ]
             )
         # Commit results:
