@@ -252,7 +252,7 @@ def main():
     from utz.use import use
 
     file = docker.File()
-    with use(file):
+    with use(file), file:
         # If this becomes true, write out a fresh Dockerfile (to `tmp_dockerfile`) and build an image
         # based from it; otherwise, use an extant upstream image
         build_image = False
@@ -498,7 +498,10 @@ def main():
         if jupyter_src_port != jupyter_dst_port:
             raise ValueError(f'Mismatching jupyter ports in non-docker mode: {jupyter_src_port} != {jupyter_dst_port}')
         jupyter_port = jupyter_src_port
-        run('jupyter','notebook','--port',jupyter_port, dry_run=dry_run)
+        cmd = ['jupyter','notebook','--port',jupyter_port]
+        if not jupyter_open:
+            cmd += ['--no-browser']
+        run(*cmd, dry_run=dry_run)
 
 
 if __name__ == '__main__':
