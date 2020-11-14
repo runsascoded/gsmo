@@ -8,12 +8,12 @@ class Arg:
 
 
 run_args = [
-    Arg('--commit',nargs='*',action='append',help='Paths to `git add` and commit after running'),
+    Arg('--commit',action='append',help='Paths to `git add` and commit after running'),
     Arg('-C','--dir',help="Resolve paths (incl. mounts) relative to this directory (default: current directory)"),
     Arg('-o','--out',help='Path or directory to write output notebook to (relative to `--dir` directory; default: "nbs")'),
     Arg('-x','--run','--execute',help='Notebook to run (default: run.ipynb)'),
-    Arg('-y','--yaml',nargs='*',help='YAML string(s) with configuration settings for the module being run'),
-    Arg('-Y','--yaml-path',nargs='*',help='YAML file(s) with configuration settings for the module being run'),  # TODO: update example nb
+    Arg('-y','--yaml',action='append',help='YAML string(s) with configuration settings for the module being run'),
+    Arg('-Y','--yaml-path',action='append',help='YAML file(s) with configuration settings for the module being run'),  # TODO: update example nb
 ]
 
 def load_run_config(args):

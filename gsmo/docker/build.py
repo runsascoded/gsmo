@@ -172,8 +172,8 @@ def main():
     parser.add_argument('-l','--latest',action='store_true',help='Only create "latest" tag. By default, a tag for the python version is also created, as well as for the current Git commit (if there are no uncommitted changes)')
     parser.add_argument('-p','--python-version',default='3.8.6',help='Python version to build base image against')
     parser.add_argument('-P','--push',action='store_true',help='Push built images')
-    parser.add_argument('-t','--token',nargs='*',help='Token to log in to Docker Hub with (or multiple arguments of the form "<repository>=<token>")')
-    parser.add_argument('-u','--username',nargs='*',help='User to log in to Docker Hub as (or multiple arguments of the form "<repository>=<username>")')
+    parser.add_argument('-t','--token',action='append',help='Token to log in to Docker Hub with (or multiple arguments of the form "<repository>=<token>")')
+    parser.add_argument('-u','--username',action='append',help='User to log in to Docker Hub as (or multiple arguments of the form "<repository>=<username>")')
     parser.add_argument('--repository',default='runsascoded/gsmo',help='Docker repository for built image')
     args = parser.parse_args()
     copy = args.copy
