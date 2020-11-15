@@ -251,18 +251,22 @@ def main():
     from utz import docker
     from utz.use import use
 
-    file = docker.File()
+    # If this becomes true, write out a fresh Dockerfile (to `tmp_dockerfile`) and build an image
+    # based from it; otherwise, use an extant upstream image
+    build_image = False
+
+    dockerfile = join(cwd, 'Dockerfile')
+    if exists(dockerfile):
+        build_image = True
+        extend = dockerfile
+    else:
+        extend = None
+
+    file = docker.File(extend=extend)
     with use(file), file:
-        # If this becomes true, write out a fresh Dockerfile (to `tmp_dockerfile`) and build an image
-        # based from it; otherwise, use an extant upstream image
-        build_image = False
-        tmp_dockerfile = file.path
 
         dockerfile = join(cwd, 'Dockerfile')
-        if exists(dockerfile):
-            build_image = True
-            copy(dockerfile, tmp_dockerfile)
-        else:
+        if not exists(dockerfile):
             FROM(base_image)
 
         if apts:
