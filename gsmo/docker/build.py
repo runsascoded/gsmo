@@ -153,7 +153,7 @@ def build(
 
     if not latest:
         tag(python_version)
-        if check('git','diff','--quiet','--exit-code','HEAD'):
+        if not lines('git','status','--short','--untracked-files','no'):
             sha = line('git','log','-n1','--format=%h')
             tag(sha)
             tag(sha, python_version)
