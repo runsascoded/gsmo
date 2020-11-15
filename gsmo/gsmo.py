@@ -14,6 +14,7 @@ def main():
         Arg('-D','--no-docker',dest='docker',default=True,action='store_false',help="Run in the current shell instead of in Docker"),
         Arg('-O','--no-open',default=None,action='store_true',help='Skip opening Jupyter notebook server in browser'),
         Arg('-s','--shell',default=None,action='store_true',help="Open a /bin/bash shell in the container (instead of running a jupyter server)"),  # TODO: implement
+        Arg('--dir',help='Root dir for jupyter notebook server (default: --dst / `/src`'),
     ]
 
     docker_args = [
@@ -33,6 +34,7 @@ def main():
         Arg('-n','--dry-run',action='count',default=0,help="Prepare and print run cmd (including building Docker image), but don't execute it. If passed twice, stop before building Docker image"),
         Arg('--name',help='Container name (defaults to directory basename)'),
         Arg('-p','--pip',help='Comma-separated (or multi-arg) list of packages to pip install'),
+        Arg('--container-pip','--pie',action='append',help='When running the container, `pip install -e` a directory or directories (especially subdirectories of the project being run, which are mounted into the container and are not available for `pip install`ing at image-build time) before running the usual entrypoint script'),
         Arg('-P','--port',action='append',help='Ports (or ranges) to expose from the container (if Jupyter server is being run, the first port in the first provided range will be used); can be passed multiple times and/or as comma-delimited lists'),
         Arg('--rm','--remove-container',default=None,action='store_true',help="Remove Docker container after run (pass `--rm` to `docker run`)"),
         Arg('-R','--skip-requirements-txt',default=None,action='store_true',help="Skip {reading,`pip install`ing} any requirements.txt that is present"),
@@ -41,7 +43,6 @@ def main():
         Arg('-u','--image-user',default=None,action='store_true',help="Create current user inside Docker image (at build time)"),
         Arg('-U','--root','--no-user',default=None,action='store_true',help="Run docker as root (instead of as the current system user)"),
         Arg('-v','--mount',action='append',help='Paths to mount into Docker container; relative paths are accepted, and the destination can be omitted if it matches the src (relative to the current directory, e.g. "home" → "/home")'),
-        Arg('--pip_mount',help='Optionally `pip install -e` a mounted directory inside the container before running the usual entrypoint script'),
     ]
 
     subparsers = parser.add_subparsers()
@@ -95,6 +96,8 @@ def main():
 
     dst = get('dst',DEFAULT_SRC_MOUNT_DIR)
     src = cwd
+
+    jupyter_dir = get('dir') or dst
 
     # Detect when we are running a git submodule, and adjust src mount to include the containing Git repository (and Git
     # directory, which will contain this module's Git dir under its .git/modules); this is necessary for Git operations
@@ -255,6 +258,7 @@ def main():
     # based from it; otherwise, use an extant upstream image
     build_image = False
 
+    # docker_gid = None
     dockerfile = join(cwd, 'Dockerfile')
     if exists(dockerfile):
         build_image = True
@@ -264,9 +268,7 @@ def main():
 
     file = docker.File(extend=extend)
     with use(file), file:
-
-        dockerfile = join(cwd, 'Dockerfile')
-        if not exists(dockerfile):
+        if not extend:
             FROM(base_image)
 
         if apts:
@@ -306,16 +308,23 @@ def main():
             if image_user or image_group or sudo:
                 cmds = []
                 if image_group: cmds += [f'groupadd -f -o -g {id.gid} {id.group}']
-                if image_user: cmds += [
-                    f'useradd -u {id.uid} -g {id.gid} -s /bin/bash -m -d {IMAGE_HOME} {id.user}',
-                    f'chown -R {id.uid}:{id.gid} {IMAGE_HOME}',
-                ]
+                if image_user:
+                    if dind:
+                        useradd = f'useradd -u {id.uid} -g {id.gid} -G docker -s /bin/bash -m -d {IMAGE_HOME} {id.user}'
+                    else:
+                        useradd = f'useradd -u {id.uid} -g {id.gid} -s /bin/bash -m -d {IMAGE_HOME} {id.user}'
+                    cmds += [
+                        useradd,
+                        f'chown -R {id.uid}:{id.gid} {IMAGE_HOME}',
+                    ]
                 if sudo: cmds += [
                     'apt-get update',
                     'apt-get install -y sudo',
                     'perl -pi -e "s/^%%sudo(.*ALL=).*/%s\\1(ALL) NOPASSWD: ALL/" /etc/sudoers' % id.user,
                 ]
                 build_image = True
+                # if dind:
+                #     cmds += [f'usermod -aG docker {id.user}']
                 RUN(*cmds)
                 if image_user:
                     if image_group:
@@ -377,6 +386,7 @@ def main():
             '--ip','0.0.0.0',
             '--port',jupyter_dst_port,
             '--ContentsManager.allow_hidden=True',
+            f'--NotebookApp.notebook_dir={jupyter_dir}',
         ]
         if root:
             args += [ '--allow-root', ]
@@ -388,9 +398,9 @@ def main():
         if commit:
             args += [ ['--commit',path] for path in commit]
 
-    pip_mounts = lists(get('pip_mount'))
-    if pip_mounts:
-        args = [ len(pip_mounts) ] + pip_mounts + [ entrypoint ] + args
+    container_pips = lists(get('container_pip'))
+    if container_pips:
+        args = [ len(container_pips) ] + container_pips + [ entrypoint ] + args
         entrypoint = '/gsmo/pip_entrypoint.sh'
 
     if run_mode:
@@ -468,7 +478,7 @@ def main():
                         raise Exception('Unexpected `jupyter notebook list` output:\n\t%s' % "\n\t".join(lns))
                     if len(lns) == 2:
                         ln = lns[1]
-                        rgx = f'(?P<url>http://0\.0\.0\.0:(?P<port>\d+)/\?token=(?P<token>[0-9a-f]+)) :: {dst}'
+                        rgx = f'(?P<url>http://0\.0\.0\.0:(?P<port>\d+)/\?token=(?P<token>[0-9a-f]+)) :: {jupyter_dir}'
                         if not (m := match(rgx, ln)):
                             raise RuntimeError(f'Unrecognized notebook server line: {ln}')
                         if m['port'] != str(jupyter_dst_port):
