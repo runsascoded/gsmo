@@ -7,7 +7,9 @@ from jupyter_client import kernelspec
 from os import makedirs, remove
 from os.path import abspath, basename, dirname, exists, join, splitext
 from pathlib import Path
+from shutil import move
 from sys import executable
+from tempfile import NamedTemporaryFile
 from traceback import format_exception
 
 from papermill import execute_notebook, PapermillExecutionError
@@ -47,6 +49,7 @@ def execute(
     msg=None,
     start_sha=None,
     msg_path='_MSG',
+    tmp_output=True,
     *args,
     **kwargs
 ):
@@ -129,11 +132,18 @@ def execute(
     else:
         cwd = dirname(abspath(input))
 
+    if tmp_output:
+        prefix, _ = splitext(basename(output))
+        staging_output = NamedTemporaryFile(prefix=prefix, suffix='.ipynb').name
+    else:
+        staging_output = output
+
     exc = None
+    success_msg = None
     try:
         execute_notebook(
             str(input),
-            str(output),
+            str(staging_output),
             *args,
             nest_asyncio=nest_asyncio,  # allow papermill-in-papermill
             cwd=cwd,
@@ -153,8 +163,11 @@ def execute(
         else:
             exc = e
             success_msg = None
-    else:
-        success_msg = None
+    finally:
+        if tmp_output:
+            print(f'moving run notebook from {staging_output} to {output}')
+            move(staging_output, output)
+
 
     if commit or exc:
         if exc:
