@@ -323,8 +323,6 @@ def main():
                     'perl -pi -e "s/^%%sudo(.*ALL=).*/%s\\1(ALL) NOPASSWD: ALL/" /etc/sudoers' % id.user,
                 ]
                 build_image = True
-                # if dind:
-                #     cmds += [f'usermod -aG docker {id.user}']
                 RUN(*cmds)
                 if image_user:
                     if image_group:
