@@ -237,7 +237,6 @@ def main():
 
         build(
             **build_kwargs,
-            dockerfile='Dockerfile',
             embed='clone',
             ref=ref,
             sha=sha,
