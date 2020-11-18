@@ -105,7 +105,7 @@ def build(
 
             NOTE("Create a $HOME dir (independent of user name; sometimes user is anonymous, e.g. via `-u $(id -u):$(id -g)`)")
             ENV(HOME=IMAGE_HOME)
-            RUN(f'chmod ug+rwx {IMAGE_HOME}')
+            RUN(f'chmod ugo+rwx {IMAGE_HOME}')
 
             NOTE('Simple .bashrc for anonymous users that just sources /root/.bashrc')
             COPY('home/.bashrc',f'{IMAGE_HOME}/.bashrc')
