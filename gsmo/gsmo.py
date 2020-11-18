@@ -3,7 +3,7 @@
 from utz import *
 
 from .cli import Arg, run_args, load_run_config
-from .config import clean_group, clean_mount, lists, Config, DEFAULT_SRC_MOUNT_DIR, DEFAULT_RUN_NB, IMAGE_HOME, DEFAULT_IMAGE, DEFAULT_DIND_IMAGE
+from .config import clean_group, clean_mount, lists, Config, DEFAULT_IMAGE_REPO, DEFAULT_SRC_MOUNT_DIR, DEFAULT_RUN_NB, IMAGE_HOME, DEFAULT_IMAGE, DEFAULT_DIND_IMAGE
 
 def main():
     parser = ArgumentParser()
@@ -171,10 +171,13 @@ def main():
     dind = get('dind')
     if dind:
         default_image = DEFAULT_DIND_IMAGE
-        mounts += [ '/var/run/docker.sock:/var/run/docker.sock']
+        mounts += [ '/var/run/docker.sock:/var/run/docker.sock' ]
     else:
         default_image = DEFAULT_IMAGE
     base_image = get('image', default_image)
+    if base_image.startswith(':'):
+        # shorthand for just specifying a runsascoded/gsmo tag
+        base_image = f'{DEFAULT_IMAGE_REPO}{base_image}'
     image = base_image
 
     use_docker = get('docker', True)

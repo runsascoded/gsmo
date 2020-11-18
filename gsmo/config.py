@@ -10,7 +10,8 @@ from .err import OK, RAISE, WARN
 from .version import get_version
 version = get_version()
 
-DEFAULT_IMAGE = f'runsascoded/gsmo:{version}'
+DEFAULT_IMAGE_REPO = 'runsascoded/gsmo'
+DEFAULT_IMAGE = f'{DEFAULT_IMAGE_REPO}:{version}'
 DEFAULT_DIND_IMAGE = f'{DEFAULT_IMAGE}:dind_{version}'
 IMAGE_HOME = '/home'
 DEFAULT_CONFIG_STEMS = ['gsmo','config']
