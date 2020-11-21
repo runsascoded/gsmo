@@ -12,7 +12,7 @@ version = get_version()
 
 DEFAULT_IMAGE_REPO = 'runsascoded/gsmo'
 DEFAULT_IMAGE = f'{DEFAULT_IMAGE_REPO}:{version}'
-DEFAULT_DIND_IMAGE = f'{DEFAULT_IMAGE}:dind_{version}'
+DEFAULT_DIND_IMAGE = f'{DEFAULT_IMAGE_REPO}:dind_{version}'
 IMAGE_HOME = '/home'
 DEFAULT_CONFIG_STEMS = ['gsmo','config']
 CONFIG_XTNS = ['yaml','yml']
