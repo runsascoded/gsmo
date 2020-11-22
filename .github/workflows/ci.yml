@@ -11,7 +11,8 @@ jobs:
           submodules: true
       - name: Fetch example submodule
         run: |
-          cd example/factors && git fetch --unshallow origin
+          pushd example/factors && git fetch --unshallow origin && popd
+          pushd example/dind && git fetch --unshallow origin && popd
       - name: Set up Python
         uses: actions/setup-python@v2
         with:
