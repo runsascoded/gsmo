@@ -333,17 +333,20 @@ def main():
                 cmds = []
 
                 if image_group or dind:
-                    cmds += [f'groupadd -f -o -g {id.gid} {id.group}']
+                    #cmds += [f'groupadd -f -o -g {id.gid} {id.group}']
+                    RUN(f'groupadd -f -o -g {id.gid} {id.group}')
 
                 if image_user or dind:
                     if dind:
                         useradd = f'useradd -u {id.uid} -g {id.gid} -G docker -s /bin/bash -m -d {IMAGE_HOME} {id.user}'
                     else:
                         useradd = f'useradd -u {id.uid} -g {id.gid} -s /bin/bash -m -d {IMAGE_HOME} {id.user}'
-                    cmds += [
-                        useradd,
-                        f'chown -R {id.uid}:{id.gid} {IMAGE_HOME}',
-                    ]
+                    RUN(useradd)
+                    RUN(f'chown -R {id.uid}:{id.gid} {IMAGE_HOME}')
+                    # cmds += [
+                    #     useradd,
+                    #     f'chown -R {id.uid}:{id.gid} {IMAGE_HOME}',
+                    # ]
 
                 if sudo or dind:
                     # sudo is already bundled in the dind image
