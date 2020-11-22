@@ -28,6 +28,7 @@ def main():
         Arg('-E','--container-env',action='append',help='Environment variables to pass to Docker container (at run time)'),
         Arg('--container-env-file','--Ef',action='append',help='Files containing environment variables to pass to Docker container (at run time)'),
         Arg('-i','--image',help=f'Base docker image to build on (default: f{DEFAULT_IMAGE})'),
+        Arg('--id',help='Comma-delimited subset of {user,group,root,sudo} (or {u,g,r,s}); short-hand for --image-user, --image-group, --root, and --sudo, resp.'),
         Arg('-I','--no-interactive',default=None,action='store_true',help="Don't run interactively / allocate a TTY (i.e. skip `-it` flags to `docker run`)"),
         Arg('-g','--image-group',default=None,action='store_true',help='Create current group inside Docker image (at build time)'),
         Arg('-G','--group',action='append',help='Groups to add user to when running the Docker container'),
@@ -35,7 +36,7 @@ def main():
         Arg('-n','--dry-run',action='count',default=0,help="Prepare and print run cmd (including building Docker image), but don't execute it. If passed twice, stop before building Docker image"),
         Arg('--name',help='Container name (defaults to directory basename)'),
         Arg('-p','--pip',help='Comma-separated (or multi-arg) list of packages to pip install'),
-        Arg('--container-pip','--pie',action='append',help='When running the container, `pip install -e` a directory or directories (especially subdirectories of the project being run, which are mounted into the container and are not available for `pip install`ing at image-build time) before running the usual entrypoint script'),
+        Arg('--container-pip','--pie','--pip-e',action='append',help='When running the container, `pip install -e` a directory or directories (especially subdirectories of the project being run, which are mounted into the container and are not available for `pip install`ing at image-build time) before running the usual entrypoint script'),
         Arg('-P','--port',action='append',help='Ports (or ranges) to expose from the container (if Jupyter server is being run, the first port in the first provided range will be used); can be passed multiple times and/or as comma-delimited lists'),
         Arg('--rm','--remove-container',default=None,action='store_true',help="Remove Docker container after run (pass `--rm` to `docker run`)"),
         Arg('-R','--skip-requirements-txt',default=None,action='store_true',help="Skip {reading,`pip install`ing} any requirements.txt that is present"),
@@ -186,14 +187,33 @@ def main():
 
     ports = lists(get('port'))
     apts = lists(get('apt'))
-    pips = lists(get('pip'))
+    container_pips = lists(get('container_pip')) + lists(get('pie'))
+    pips = get('pip')
+    if isinstance(pips, dict):
+        keys = pips.keys()
+        if 'container' in keys: container_pips += pips.pop('container')
+        if 'img' in keys:
+            assert 'image' not in keys
+            pips = lists(pips.pop('img'))
+        elif 'image' in keys:
+            pips = lists(pips.pop('image'))
+        if keys:
+            raise ValueError(f'Unexpected keys in `pip` config dict (expected: "container" || ("img" ^ "image")): {keys}')
+
     tags = lists(get('tag'))
     name = get('name', default=basename(cwd))
     skip_requirements_txt = args.skip_requirements_txt
     root = get('root')
+
     image_user = get('image_user')
     image_group = get('image_group')
     sudo = get('sudo')
+    id_attrs = lists(get('id'))
+    if 'u' in id_attrs or 'user' in id_attrs: image_user = True
+    if 'g' in id_attrs or 'group' in id_attrs: image_group = True
+    if 'r' in id_attrs or 'root' in id_attrs: root = True
+    if 's' in id_attrs or 'sudo' in id_attrs: sudo = True
+
     dry_run = get('dry_run')
 
     if jupyter_mode:
@@ -311,7 +331,10 @@ def main():
         if use_docker:
             if image_user or image_group or sudo:
                 cmds = []
-                if image_group: cmds += [f'groupadd -f -o -g {id.gid} {id.group}']
+
+                if image_group:
+                    cmds += [f'groupadd -f -o -g {id.gid} {id.group}']
+
                 if image_user:
                     if dind:
                         useradd = f'useradd -u {id.uid} -g {id.gid} -G docker -s /bin/bash -m -d {IMAGE_HOME} {id.user}'
@@ -321,11 +344,18 @@ def main():
                         useradd,
                         f'chown -R {id.uid}:{id.gid} {IMAGE_HOME}',
                     ]
-                if sudo: cmds += [
-                    'apt-get update',
-                    'apt-get install -y sudo',
-                    'perl -pi -e "s/^%%sudo(.*ALL=).*/%s\\1(ALL) NOPASSWD: ALL/" /etc/sudoers' % id.user,
-                ]
+
+                if sudo or dind:
+                    # sudo is already bundled in the dind image
+                    if not dind:
+                        cmds += [
+                            'apt-get update',
+                            'apt-get install -y sudo',
+                        ]
+
+                    # user isn't known at build-time though, so pswd-less sudo is patched in here
+                    cmds += [ 'perl -pi -e "s/^%%sudo(.*ALL=).*/%s\\1(ALL) NOPASSWD: ALL/" /etc/sudoers' % id.user, ]
+
                 build_image = True
                 RUN(*cmds)
                 if image_user:
@@ -400,7 +430,6 @@ def main():
         if commit:
             args += [ ['--commit',path] for path in commit]
 
-    container_pips = lists(get('container_pip'))
     if container_pips:
         args = [ len(container_pips) ] + container_pips + [ entrypoint ] + args
         entrypoint = '/gsmo/pip_entrypoint.sh'
@@ -408,6 +437,8 @@ def main():
     if dind:
         args = [entrypoint] + args
         entrypoint = '/gsmo/dind_entrypoint.sh'
+        img_docker_gid = line('docker','run','--rm','--entrypoint','getent',base_image,'group','docker').split(':')[2]
+        groups.append(img_docker_gid)
 
     if run_mode:
         RUN_CONFIG_YML_PATH = '/run_config.yml'
