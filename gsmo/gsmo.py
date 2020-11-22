@@ -4,6 +4,7 @@ from utz import *
 
 from .cli import Arg, run_args, load_run_config
 from .config import clean_group, clean_mount, lists, Config, DEFAULT_IMAGE_REPO, DEFAULT_SRC_MOUNT_DIR, DEFAULT_RUN_NB, IMAGE_HOME, DEFAULT_IMAGE, DEFAULT_DIND_IMAGE
+from .err import OK, RAISE, WARN
 
 def main():
     parser = ArgumentParser()
@@ -153,11 +154,11 @@ def main():
 
     missing_paths = get('missing_paths')
     if missing_paths == 1:
-        from .err import WARN
         missing_paths = WARN
     elif missing_paths == 2:
-        from .err import OK
         missing_paths = OK
+    else:
+        missing_paths = RAISE
 
     groups = lists(get('group'))
     groups = [ g for group in groups if (g := clean_group(group, err=missing_paths)) ]
@@ -403,6 +404,10 @@ def main():
     if container_pips:
         args = [ len(container_pips) ] + container_pips + [ entrypoint ] + args
         entrypoint = '/gsmo/pip_entrypoint.sh'
+
+    if dind:
+        args = [entrypoint] + args
+        entrypoint = '/gsmo/dind_entrypoint.sh'
 
     if run_mode:
         RUN_CONFIG_YML_PATH = '/run_config.yml'
