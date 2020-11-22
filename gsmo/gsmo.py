@@ -329,13 +329,13 @@ def main():
                 ENV(*[ l.strip() for l in f.readlines() ])
 
         if use_docker:
-            if image_user or image_group or sudo:
+            if image_user or image_group or sudo or dind:
                 cmds = []
 
                 if image_group:
                     cmds += [f'groupadd -f -o -g {id.gid} {id.group}']
 
-                if image_user:
+                if image_user or dind:
                     if dind:
                         useradd = f'useradd -u {id.uid} -g {id.gid} -G docker -s /bin/bash -m -d {IMAGE_HOME} {id.user}'
                     else:

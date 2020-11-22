@@ -4,3 +4,6 @@
 [submodule "example/factors"]
 	path = example/factors
 	url = https://gitlab.com/gsmo/examples/factors.git
+[submodule "example/dind"]
+	path = example/dind
+	url = https://gitlab.com/gsmo/examples/dind.git
