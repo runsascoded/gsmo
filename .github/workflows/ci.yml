@@ -30,9 +30,9 @@ jobs:
         uses: docker/setup-qemu-action@v1
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v1
-      - name: "Docker: build and tag (non-DinD)"
+      - name: "Docker: build and tag"
         run: |
-          docker/build.sh -D -u runsascoded -t runsascoded/gsmo=${{ secrets.DOCKER_HUB_TOKEN }}
+          docker/build.sh
       - name: Run tests
         run: |
           git config --global user.name CI

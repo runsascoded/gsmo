@@ -1,7 +1,7 @@
 # Extend runsascoded/gsmo: install Docker CLI
 ARG TAG=latest
-ARG IMAGE=runsascoded/gsmo
-FROM ${IMAGE}:${TAG}
+ARG REPO=runsascoded/gsmo
+FROM ${REPO}:${TAG}
 
 # Install docker in docker
 RUN apt-get update \
