@@ -332,7 +332,7 @@ def main():
             if image_user or image_group or sudo or dind:
                 cmds = []
 
-                if image_group:
+                if image_group or dind:
                     cmds += [f'groupadd -f -o -g {id.gid} {id.group}']
 
                 if image_user or dind:
