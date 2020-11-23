@@ -3,7 +3,7 @@
 from utz import *
 
 from .cli import Arg, run_args, load_run_config
-from .config import clean_group, clean_mount, lists, Config, DEFAULT_IMAGE_REPO, DEFAULT_SRC_MOUNT_DIR, DEFAULT_RUN_NB, IMAGE_HOME, DEFAULT_IMAGE, DEFAULT_DIND_IMAGE
+from .config import clean_group, clean_mount, lists, Config, DEFAULT_IMAGE_REPO, DEFAULT_SRC_MOUNT_DIR, DEFAULT_RUN_NB, IMAGE_HOME, DEFAULT_GROUP, DEFAULT_USER, DEFAULT_IMAGE, DEFAULT_DIND_IMAGE
 from .err import OK, RAISE, WARN
 
 def main():
@@ -30,8 +30,8 @@ def main():
         Arg('-i','--image',help=f'Base docker image to build on (default: f{DEFAULT_IMAGE})'),
         Arg('--id',help='Comma-delimited subset of {user,group,root,sudo} (or {u,g,r,s}); short-hand for --image-user, --image-group, --root, and --sudo, resp.'),
         Arg('-I','--no-interactive',default=None,action='store_true',help="Don't run interactively / allocate a TTY (i.e. skip `-it` flags to `docker run`)"),
-        Arg('-g','--image-group',default=None,action='store_true',help='Create current group inside Docker image (at build time)'),
-        Arg('-G','--group',action='append',help='Groups to add user to when running the Docker container'),
+        Arg('-g','--image-group',help='Create a group with this name inside the Docker image (with same GID as the current host-machine group; empty string implies using the current host-machine group name)'),
+        Arg('-G','--group',action='append',help="Additional groups to add docker image user to"),
         Arg('-M','--missing-paths',default=0,action='count',help='Relax checking of paths (for propagating mounts and groups into Docker): 1x ⟹ warn, 2x ⟹ ignore'),
         Arg('-n','--dry-run',action='count',default=0,help="Prepare and print run cmd (including building Docker image), but don't execute it. If passed twice, stop before building Docker image"),
         Arg('--name',help='Container name (defaults to directory basename)'),
@@ -42,7 +42,7 @@ def main():
         Arg('-R','--skip-requirements-txt',default=None,action='store_true',help="Skip {reading,`pip install`ing} any requirements.txt that is present"),
         Arg('--sudo',default=None,action='store_true',help="Ensure Docker image user has sudo privileges"),
         Arg('-t','--tag',help='Comma-separated (or multi-arg) list of tags to add to built docker image'),
-        Arg('-u','--image-user',default=None,action='store_true',help="Create current user inside Docker image (at build time)"),
+        Arg('-u','--image-user',help='Create a user with this name inside the Docker image (with same UID as the current host-machine user; empty string implies using the current host-machine user name)'),
         Arg('-U','--root','--no-user',default=None,action='store_true',help="Run docker as root (instead of as the current system user)"),
         Arg('-v','--mount',action='append',help='Paths to mount into Docker container; relative paths are accepted, and the destination can be omitted if it matches the src (relative to the current directory, e.g. "home" → "/home")'),
     ]
@@ -205,12 +205,17 @@ def main():
     skip_requirements_txt = args.skip_requirements_txt
     root = get('root')
 
-    image_user = get('image_user')
-    image_group = get('image_group')
+    from .util.unix_id import UnixId
+    id = UnixId()
+
+    image_user = get('image_user', DEFAULT_USER)
+    if image_user == '': image_user = id.user
+    image_group = get('image_group', DEFAULT_GROUP)
+    if image_group == '': image_group = id.group
     sudo = get('sudo')
     id_attrs = lists(get('id'))
-    if 'u' in id_attrs or 'user' in id_attrs: image_user = True
-    if 'g' in id_attrs or 'group' in id_attrs: image_group = True
+    if 'u' in id_attrs or 'user' in id_attrs: image_user = id.user
+    if 'g' in id_attrs or 'group' in id_attrs: image_group = id.group
     if 'r' in id_attrs or 'root' in id_attrs: root = True
     if 's' in id_attrs or 'sudo' in id_attrs: sudo = True
 
@@ -272,9 +277,6 @@ def main():
         else:
             ports = []
 
-    from .util.unix_id import UnixId
-    id = UnixId()
-
     from utz import docker
     from utz.use import use
 
@@ -333,14 +335,16 @@ def main():
                 cmds = []
 
                 if image_group or dind:
-                    #cmds += [f'groupadd -f -o -g {id.gid} {id.group}']
-                    RUN(f'groupadd -f -o -g {id.gid} {id.group}')
+                    assert image_group
+                    #cmds += [f'groupadd -f -o -g {id.gid} {image_group}']
+                    RUN(f'groupadd -o -g {id.gid} {image_group}')
 
                 if image_user or dind:
+                    assert image_user
                     if dind:
-                        useradd = f'useradd -u {id.uid} -g {id.gid} -G docker -s /bin/bash -m -d {IMAGE_HOME} {id.user}'
+                        useradd = f'useradd -u {id.uid} -g {id.gid} -G docker -s /bin/bash -m -d {IMAGE_HOME} {image_user}'
                     else:
-                        useradd = f'useradd -u {id.uid} -g {id.gid} -s /bin/bash -m -d {IMAGE_HOME} {id.user}'
+                        useradd = f'useradd -u {id.uid} -g {id.gid} -s /bin/bash -m -d {IMAGE_HOME} {image_user}'
                     RUN(useradd)
                     RUN(f'chown -R {id.uid}:{id.gid} {IMAGE_HOME}')
                     # cmds += [
@@ -357,7 +361,7 @@ def main():
                         ]
 
                     # user isn't known at build-time though, so pswd-less sudo is patched in here
-                    cmds += [ 'perl -pi -e "s/^%%sudo(.*ALL=).*/%s\\1(ALL) NOPASSWD: ALL/" /etc/sudoers' % id.user, ]
+                    cmds += [ 'perl -pi -e "s/^%%sudo(.*ALL=).*/%s\\1(ALL) NOPASSWD: ALL/" /etc/sudoers' % image_user, ]
 
                 build_image = True
                 RUN(*cmds)
@@ -461,7 +465,7 @@ def main():
         return v
 
     # Get Git user name/email for propagating into image
-    id = o(
+    git_id = o(
         name  = get_git_id( 'name', '%an'),
         email = get_git_id('email', '%ae'),
     )
@@ -469,10 +473,10 @@ def main():
     # Set up author info for git committing
     container_envs = {
         **container_envs,
-       'GIT_AUTHOR_NAME'    : id.name,
-       'GIT_AUTHOR_EMAIL'   : id.email,
-       'GIT_COMMITTER_NAME' : id.name,
-       'GIT_COMMITTER_EMAIL': id.email,
+       'GIT_AUTHOR_NAME'    : git_id.name,
+       'GIT_AUTHOR_EMAIL'   : git_id.email,
+       'GIT_COMMITTER_NAME' : git_id.name,
+       'GIT_COMMITTER_EMAIL': git_id.email,
     }
 
     # Build Docker CLI args

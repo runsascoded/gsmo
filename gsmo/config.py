@@ -20,6 +20,9 @@ DEFAULT_SRC_MOUNT_DIR = '/src'
 DEFAULT_RUN_NB = 'run.ipynb'
 DEFAULT_NB_DIR = 'nbs'
 
+DEFAULT_USER = 'gsmo'
+DEFAULT_GROUP = 'gsmo'
+
 class Config:
     def __init__(self, args):
         self.args = args

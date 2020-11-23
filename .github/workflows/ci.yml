@@ -22,6 +22,7 @@ jobs:
         run: |
           git fetch --depth=1 origin +"$GITHUB_REF:$GITHUB_REF"
           git log --graph --oneline --decorate -n 10
+          id
       - name: Install gsmo, deps
         run: |
           pip install wheel
