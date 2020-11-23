@@ -54,9 +54,71 @@ def build(
 
     file = docker.File(copy_dir=docker_dir)
     with use(file):
+        NOTE('Base Dockerfile for Python projects; recent Git, pandas/jupyter/sqlalchemy, and dotfiles for working in-container')
+        FROM('python',f'{python_version}-slim')
+        LN()
+        NOTE('Disable pip upgrade warning, add default system-level gitignore, and configs for setting git user.{email,name} at run-time',)
+        COPY(
+            'etc/pip.conf','etc/.gitignore','etc/gitconfig',
+            '/etc/',
+        )
+        RUN('chmod o+rx /etc/pip.conf /etc/.gitignore /etc/gitconfig')
+        LN()
+        RUN(
+            'echo "deb http://ftp.us.debian.org/debian testing main" >> /etc/apt/sources.list',
+            'apt-get update',
+            'apt-get install -y -o APT::Immediate-Configure=0 curl gcc g++ git nano',
+            'apt-get clean all',
+            'rm -rf /var/lib/apt/lists',
+        )
+        LN()
+        pips = [
+            dict(
+                pip=None,
+                wheel=None,
+            ),
+            dict(
+                jupyter='1.0.0',
+                nbdime='2.1.0',
+                pandas='1.1.3',
+                papermill='2.2.0',
+                pyyaml='5.3.1',
+            )
+        ]
+        NOTE('Basic pip dependencies: Jupyter, pandas')
+        RUN(*[
+            'pip install --upgrade --no-cache %s' % ' '.join([
+                f'{k}=={v}' if v else k
+                for k,v in pip.items()
+            ])
+            for pip in pips
+        ])
+        LN()
+        NOTE('Install dotfiles + bash helpers and Jupyter configs')
+        WORKDIR('/root')
+        RUN(
+            'curl -L https://j.mp/_rc > _rc',
+            'chmod u+x _rc',
+            './_rc -b server runsascoded/.rc',
+        )
+        COPY('usr/local/etc/jupyter/nbconfig/notebook.json','/usr/local/etc/jupyter/nbconfig/')
+        RUN('chmod o+rx /usr/local/etc/jupyter/nbconfig/ /root')
+        LN()
+
+        WORKDIR(); LN()
+
+        NOTE("Create a $HOME dir (independent of user name; sometimes user is anonymous, e.g. via `-u $(id -u):$(id -g)`)")
+        ENV(HOME=IMAGE_HOME)
+        RUN(f'chmod ugo+rwx {IMAGE_HOME}')
+
+        NOTE('Simple .bashrc for anonymous users that just sources /root/.bashrc')
+        COPY('home/.bashrc',f'{IMAGE_HOME}/.bashrc')
+        LN()
+        RUN('pip install --upgrade --no-cache utz[setup]==0.0.37')
+        LN()
+        ENTRYPOINT([ "gsmo-entrypoint", "/src" ])
+
         if dind:
-            # Assumes runsascoded/gsmo:latest is the just-built non-dind image
-            FROM('runsascoded/gsmo')
             RUN(
                 'apt-get update',
                 'apt-get install -y apt-transport-https ca-certificates gnupg2 software-properties-common sudo',
@@ -67,70 +129,6 @@ def build(
                 'apt-get clean all',
                 'rm -rf /var/lib/apt/lists',
             )
-        else:
-            NOTE('Base Dockerfile for Python projects; recent Git, pandas/jupyter/sqlalchemy, and dotfiles for working in-container')
-            FROM('python',f'{python_version}-slim')
-            LN()
-            NOTE('Disable pip upgrade warning, add default system-level gitignore, and configs for setting git user.{email,name} at run-time',)
-            COPY(
-                'etc/pip.conf','etc/.gitignore','etc/gitconfig',
-                '/etc/',
-            )
-            RUN('chmod o+rx /etc/pip.conf /etc/.gitignore /etc/gitconfig')
-            LN()
-            RUN(
-                'echo "deb http://ftp.us.debian.org/debian testing main" >> /etc/apt/sources.list',
-                'apt-get update',
-                'apt-get install -y -o APT::Immediate-Configure=0 curl gcc g++ git nano',
-                'apt-get clean all',
-                'rm -rf /var/lib/apt/lists',
-            )
-            LN()
-            pips = [
-                dict(
-                    pip=None,
-                    wheel=None,
-                ),
-                dict(
-                    jupyter='1.0.0',
-                    nbdime='2.1.0',
-                    pandas='1.1.3',
-                    papermill='2.2.0',
-                    pyyaml='5.3.1',
-                )
-            ]
-            NOTE('Basic pip dependencies: Jupyter, pandas')
-            RUN(*[
-                'pip install --upgrade --no-cache %s' % ' '.join([
-                    f'{k}=={v}' if v else k
-                    for k,v in pip.items()
-                ])
-                for pip in pips
-            ])
-            LN()
-            NOTE('Install dotfiles + bash helpers and Jupyter configs')
-            WORKDIR('/root')
-            RUN(
-                'curl -L https://j.mp/_rc > _rc',
-                'chmod u+x _rc',
-                './_rc -b server runsascoded/.rc',
-            )
-            COPY('usr/local/etc/jupyter/nbconfig/notebook.json','/usr/local/etc/jupyter/nbconfig/')
-            RUN('chmod o+rx /usr/local/etc/jupyter/nbconfig/ /root')
-            LN()
-
-            WORKDIR(); LN()
-
-            NOTE("Create a $HOME dir (independent of user name; sometimes user is anonymous, e.g. via `-u $(id -u):$(id -g)`)")
-            ENV(HOME=IMAGE_HOME)
-            RUN(f'chmod ugo+rwx {IMAGE_HOME}')
-
-            NOTE('Simple .bashrc for anonymous users that just sources /root/.bashrc')
-            COPY('home/.bashrc',f'{IMAGE_HOME}/.bashrc')
-            LN()
-            RUN('pip install --upgrade --no-cache utz[setup]==0.0.37')
-            LN()
-            ENTRYPOINT([ "gsmo-entrypoint", "/src" ])
 
         if embed == 'clone':
             assert ref
