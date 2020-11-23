@@ -39,7 +39,7 @@ jobs:
         run: |
           git config --global user.name CI
           git config --global user.email ci@ci.ci
-          pytest -vs
+          pytest -vs gsmo/tests/test_gsmo.py::test_dind
       - name: "Docker: push"
         run: |
           docker/build.sh --push -u runsascoded -t runsascoded/gsmo=${{ secrets.DOCKER_HUB_TOKEN }}

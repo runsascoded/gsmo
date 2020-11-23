@@ -364,7 +364,8 @@ def main():
                     cmds += [ 'perl -pi -e "s/^%%sudo(.*ALL=).*/%s\\1(ALL) NOPASSWD: ALL/" /etc/sudoers' % image_user, ]
 
                 build_image = True
-                RUN(*cmds)
+                if cmds:
+                    RUN(*cmds)
                 if image_user:
                     if image_group:
                         USER(id.uid, id.gid)
