@@ -1,4 +1,5 @@
 
+from gsmo import gsmo
 from utz import *
 
 
@@ -21,7 +22,7 @@ if 'GSMO_IMAGE' in env:
 
 def test_dind():
     with example('dind',ref='e743604'):
-        run('gsmo','-i',':dind',*args,'run','-x','docker-hello-world.ipynb')
+        gsmo.main('-i',':dind',*args,'run','-x','docker-hello-world.ipynb')
         with open('nbs/docker-hello-world.ipynb','r') as f:
             import json
             nb = json.load(f)
@@ -60,7 +61,7 @@ For more examples and ideas, visit:
 def test_hailstone():
     with example('hailstone'):
         def step(value):
-            run('gsmo',*args,'run',)
+            gsmo.main(*args,'run')
             if value == 1:
                 return
             if value % 2 == 0:
@@ -87,7 +88,7 @@ def test_hailstone():
 
 def test_factors():
     with example('factors', ref='876c95c'):
-        run('gsmo',*args,'run',)
+        gsmo.main(*args,'run')
         tree = Repo().commit().tree
         assert tree['graph.png'].hexsha == '1ed114e1dd88d516ca749e516d24ef1d28fdb0de'
         assert tree['primes.png'].hexsha == '5189952fe9bcfb9f196b55bde9f6cc119b842017'

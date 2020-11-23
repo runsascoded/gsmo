@@ -6,7 +6,7 @@ from .cli import Arg, run_args, load_run_config
 from .config import clean_group, clean_mount, lists, Config, DEFAULT_IMAGE_REPO, DEFAULT_SRC_MOUNT_DIR, DEFAULT_RUN_NB, IMAGE_HOME, DEFAULT_GROUP, DEFAULT_USER, DEFAULT_IMAGE, DEFAULT_DIND_IMAGE
 from .err import OK, RAISE, WARN
 
-def main():
+def main(*args):
     parser = ArgumentParser()
     parser.add_argument('input',nargs='?',help='Input directory containing run.ipynb (and optionally gsmo.yml, or other path specified by "-y"); defaults to current directory')
 
@@ -67,7 +67,7 @@ def main():
     for arg in run_args:
         run_parser.add_argument(*arg.args, **arg.kwargs)
 
-    args = parser.parse_args()
+    args = parser.parse_args(args)
     jupyter_mode = shell_mode = run_mode = False
     cmd = getattr(args, 'cmd', None)
     if cmd =='jupyter':

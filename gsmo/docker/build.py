@@ -15,14 +15,17 @@ def build(
     push: bool,
     tokens: dict,
     usernames: dict,
-    dockerfile: str = None,
-    tag_prefix: str = None,
     embed: str = None,
     ref: str = None,
     sha: str = None,
     docker_dir: str = None,
-    **build_args,
+    dind: bool = False,
 ):
+    if dind:
+        tag_prefix = 'dind'
+    else:
+        tag_prefix = None
+
     def build_repo(*pcs):
         if tag_prefix:
             pcs = (tag_prefix,) + pcs
@@ -45,11 +48,26 @@ def build(
             run('docker','push',tagged_repo)
 
     base_repo = build_repo()
-    if embed:
-        from utz import docker
-        from utz.use import use
-        file = docker.File(copy_dir=docker_dir)
-        with use(file):
+
+    from utz import docker
+    from utz.use import use
+
+    file = docker.File(copy_dir=docker_dir)
+    with use(file):
+        if dind:
+            # Assumes runsascoded/gsmo:latest is the just-built non-dind image
+            FROM('runsascoded/gsmo')
+            RUN(
+                'apt-get update',
+                'apt-get install -y apt-transport-https ca-certificates gnupg2 software-properties-common sudo',
+                'curl -fsSL https://download.docker.com/linux/debian/gpg | apt-key add -',
+                'add-apt-repository "deb [arch=amd64] https://download.docker.com/linux/debian buster stable"',
+                'apt-get update',
+                'apt-get install -y docker-ce docker-ce-cli containerd.io',
+                'apt-get clean all',
+                'rm -rf /var/lib/apt/lists',
+            )
+        else:
             NOTE('Base Dockerfile for Python projects; recent Git, pandas/jupyter/sqlalchemy, and dotfiles for working in-container')
             FROM('python',f'{python_version}-slim')
             LN()
@@ -113,35 +131,29 @@ def build(
             RUN('pip install --upgrade --no-cache utz[setup]==0.0.37')
             LN()
             ENTRYPOINT([ "gsmo-entrypoint", "/src" ])
-            if embed == 'clone':
-                assert ref
-                assert sha
-                RUN(
-                    f'git clone -b {ref} --depth 1 https://github.com/{GH_REPO} {GSMO_DIR}',
-                    f'cd {GSMO_DIR}',
-                    f'git checkout {sha}',
-                )
-            elif embed == 'copy':
-                COPY('.',GSMO_DIR, dir=None)
-                WORKDIR(GSMO_DIR)
-                RUN(
-                    'git clean -fdx',
-                    f'chmod -R go+rx {GSMO_DIR}',
-                )
-                WORKDIR()
-            else:
-                raise ValueError('Invalid "embed" value: %s; choices: {clone,copy}' % embed)
-            RUN(f'pip install -e {GSMO_DIR}')
+
+        if embed == 'clone':
+            assert ref
+            assert sha
+            RUN(
+                f'git clone -b {ref} --depth 1 https://github.com/{GH_REPO} {GSMO_DIR}',
+                f'cd {GSMO_DIR}',
+                f'git checkout {sha}',
+            )
+        elif embed == 'copy':
+            COPY('.',GSMO_DIR, dir=None)
+            WORKDIR(GSMO_DIR)
+            RUN(
+                'git clean -fdx',
+                f'chmod -R go+rx {GSMO_DIR}',
+            )
+            WORKDIR()
+        else:
+            raise ValueError('Invalid "embed" value: %s; choices: {clone,copy}' % embed)
+
+        RUN(f'pip install -e {GSMO_DIR}')
 
         file.build(base_repo)
-    else:
-        run(
-            'docker','build',
-            '-t',base_repo,
-            '-f',dockerfile,
-            [ ['--build-arg',f'{k}={v}'] for k,v in build_args.items() ],
-            '.',
-        )
 
     _push(base_repo)
 
@@ -205,6 +217,11 @@ def main():
     docker_dir='docker'
     chdir(docker_dir)
 
+    if copy:
+        embed = 'copy'
+    else:
+        embed = 'clone'
+
     build_kwargs = dict(
         repository=repository,
         latest=latest,
@@ -212,42 +229,42 @@ def main():
         push=push,
         tokens=tokens,
         usernames=usernames,
+        embed=embed,
     )
-    if copy:
-        git_root = line('git','rev-parse','--show-toplevel')
-        with cd(git_root):
+
+    def build_img(dind):
+        kwargs = dict(dind=dind, **build_kwargs)
+        if copy:
+            git_root = line('git','rev-parse','--show-toplevel')
+            with cd(git_root):
+                build(
+                    **kwargs,
+                    docker_dir=docker_dir,
+                )
+        else:
+            if not check('git','diff','--quiet','--exit-code','HEAD'):
+                raise ValueError("Refusing to build from unclean git worktree")
+
+            # Require a branch or tag to clone for shallow /gsmo checkout inside container
+            ref = line('git','symbolic-ref','-q','--short','HEAD', err_ok=True)
+            if not ref:
+                tags = lines('git','tag','--points-at','HEAD')
+                if not tags:
+                    raise ValueError(f"Couldn't infer current branch or tag for self-clone of gsmo into Docker image")
+                ref = tags[0]
+
+            sha=line('git','log','-n','1','--format=%h')
+
             build(
-                **build_kwargs,
-                docker_dir=docker_dir,
-                embed='copy',
+                **kwargs,
+                ref=ref,
+                sha=sha,
             )
-    else:
-        if not check('git','diff','--quiet','--exit-code','HEAD'):
-            raise ValueError("Refusing to build from unclean git worktree")
 
-        # Require a branch or tag to clone for shallow /gsmo checkout inside container
-        ref = line('git','symbolic-ref','-q','--short','HEAD', err_ok=True)
-        if not ref:
-            tags = lines('git','tag','--points-at','HEAD')
-            if not tags:
-                raise ValueError(f"Couldn't infer current branch or tag for self-clone of gsmo into Docker image")
-            ref = tags[0]
-
-        sha=line('git','log','-n','1','--format=%h')
-
-        build(
-            **build_kwargs,
-            embed='clone',
-            ref=ref,
-            sha=sha,
-        )
-
+    build_img(dind=False)
     if dind:
-        build(
-            **build_kwargs,
-            dockerfile='Dockerfile.dind',
-            tag_prefix='dind',
-        )
+        build_img(dind=True)
+
 
 if __name__ == '__main__':
     main()
