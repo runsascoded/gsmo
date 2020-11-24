@@ -356,7 +356,7 @@ def main(*args):
                 if image_user or dind:
                     assert image_user
                     if dind:
-                        useradd = f'useradd -u {id.uid} -g {id.gid} -G {docker_sock.grp} -s /bin/bash -m -d {IMAGE_HOME} {image_user}'
+                        useradd = f'useradd -u {id.uid} -g {id.gid} -G {docker_sock.gid} -s /bin/bash -m -d {IMAGE_HOME} {image_user}'
                     else:
                         useradd = f'useradd -u {id.uid} -g {id.gid} -s /bin/bash -m -d {IMAGE_HOME} {image_user}'
                     cmds += [
