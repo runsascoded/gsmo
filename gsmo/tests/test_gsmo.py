@@ -32,7 +32,7 @@ def run_gsmo(*args, dind=False):
 
 
 def test_dind():
-    with example('dind',ref='e743604'):
+    with example('dind',ref='c60d0fa'):
         run_gsmo('-x','docker-hello-world.ipynb', dind=True)
         with open('nbs/docker-hello-world.ipynb','r') as f:
             import json
