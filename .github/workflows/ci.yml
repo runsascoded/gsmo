@@ -41,7 +41,7 @@ jobs:
         run: |
           git config --global user.name CI
           git config --global user.email ci@ci.ci
-          pytest -vs gsmo/tests/test_gsmo.py::test_dind
+          pytest -vs
           ls -l /var/run/docker.sock
           docker ps
       - name: "Docker: push"

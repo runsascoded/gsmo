@@ -447,8 +447,6 @@ def main(*args):
         entrypoint = '/gsmo/pip_entrypoint.sh'
 
     if dind:
-        #args = [entrypoint] + args
-        #entrypoint = '/gsmo/dind_entrypoint.sh'
         img_docker_gid = line('docker','run','-v','/var/run/docker.sock:/var/run/docker.sock','--rm','--entrypoint','stat',base_image,'-c','%g','/var/run/docker.sock')
         groups.append(img_docker_gid)
 
