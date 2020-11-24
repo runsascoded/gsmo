@@ -182,7 +182,8 @@ def build(
                 full_sha = line('git','log','-n1','--format=%H')
                 tag(full_sha)
                 tag(full_sha, python_version)
-                for ln in lines('git','show-ref','--heads'):
+                branch_lines = lines('git','show-ref','--heads', err_ok=True) or []
+                for ln in branch_lines:
                     [branch_sha, branch_ref] = ln.split(' ', 2)
                     if branch_sha == full_sha:
                         if (m := match('^refs/heads/(?P<branch>.*)', branch_ref)):
