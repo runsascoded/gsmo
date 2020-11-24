@@ -281,6 +281,17 @@ def main(*args):
         else:
             ports = []
 
+    if dind:
+        [gid,grp] = line(
+            'docker','run',
+            '-v','/var/run/docker.sock:/var/run/docker.sock',
+            '--rm','--entrypoint','stat',
+            base_image,
+            '-c','%g %G','/var/run/docker.sock',
+        ).split(' ')
+        docker_sock = o(gid=gid,grp=grp)
+        print(f'Parsed /var/run/docker.sock group: {grp} ({gid})')
+
     from utz import docker
     from utz.use import use
 
@@ -345,7 +356,7 @@ def main(*args):
                 if image_user or dind:
                     assert image_user
                     if dind:
-                        useradd = f'useradd -u {id.uid} -g {id.gid} -G docker -s /bin/bash -m -d {IMAGE_HOME} {image_user}'
+                        useradd = f'useradd -u {id.uid} -g {id.gid} -G {docker_sock.grp} -s /bin/bash -m -d {IMAGE_HOME} {image_user}'
                     else:
                         useradd = f'useradd -u {id.uid} -g {id.gid} -s /bin/bash -m -d {IMAGE_HOME} {image_user}'
                     cmds += [
@@ -444,8 +455,7 @@ def main(*args):
         entrypoint = '/gsmo/pip_entrypoint.sh'
 
     if dind:
-        img_docker_gid = line('docker','run','-v','/var/run/docker.sock:/var/run/docker.sock','--rm','--entrypoint','stat',base_image,'-c','%g','/var/run/docker.sock')
-        groups.append(img_docker_gid)
+        groups.append(docker_sock.gid)
 
     if run_mode:
         RUN_CONFIG_YML_PATH = '/run_config.yml'
