@@ -205,7 +205,7 @@ def main(*args):
             raise ValueError(f'Unexpected keys in `pip` config dict (expected: "container" || ("img" ^ "image")): {keys}')
 
     tags = lists(get('tag'))
-    name = get('name', default=basename(input))
+    name = get('name', default=basename(cwd))
     skip_requirements_txt = args.skip_requirements_txt
     root = get('root')
 
@@ -376,8 +376,7 @@ def main(*args):
                     cmds += [ 'perl -pi -e "s/^%%sudo(.*ALL=).*/%s\\1(ALL) NOPASSWD: ALL/" /etc/sudoers' % image_user, ]
 
                 build_image = True
-                if cmds:  # can remove check in utz 0.0.38
-                    RUN(*cmds)
+                RUN(*cmds)
                 if image_user:
                     if image_group:
                         USER(id.uid, id.gid)

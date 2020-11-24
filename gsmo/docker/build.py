@@ -20,6 +20,7 @@ def build(
     sha: str = None,
     docker_dir: str = None,
     dind: bool = False,
+    refs: List[str] = None,
 ):
     if dind:
         tag_prefix = 'dind'
@@ -114,7 +115,7 @@ def build(
         NOTE('Simple .bashrc for anonymous users that just sources /root/.bashrc')
         COPY('home/.bashrc',f'{IMAGE_HOME}/.bashrc')
         LN()
-        RUN('pip install --upgrade --no-cache utz[setup]==0.0.37')
+        RUN('pip install --upgrade --no-cache utz[setup]==0.0.38')
         LN()
         ENTRYPOINT([ "gsmo-entrypoint", "/src" ])
 
@@ -163,17 +164,33 @@ def build(
 
     if not latest:
         tag(python_version)
-        if not lines('git','status','--short','--untracked-files','no'):
-            sha = line('git','log','-n1','--format=%h')
-            tag(sha)
-            tag(sha, python_version)
-            for t in lines('git','tag','--points-at','HEAD'):
-                if (m := match(VERSION_TAG_RGX, t)):
-                    t = m['version']
-                tag(t)
-                tag(t, python_version)
+        if refs is not None:
+            for r in refs:
+                tag(r)
+                tag(r, python_version)
         else:
-            print("Detected uncommitted changes; skipping Git SHA tag")
+            if not lines('git','status','--short','--untracked-files','no'):
+                sha = line('git','log','-n1','--format=%h')
+                tag(sha)
+                tag(sha, python_version)
+                for t in lines('git','tag','--points-at','HEAD'):
+                    if (m := match(VERSION_TAG_RGX, t)):
+                        t = m['version']
+                    tag(t)
+                    tag(t, python_version)
+
+                full_sha = line('git','log','-n1','--format=%H')
+                tag(full_sha)
+                tag(full_sha, python_version)
+                for ln in lines('git','show-ref','--heads'):
+                    [branch_sha, branch_ref] = ln.split(' ', 2)
+                    if branch_sha == full_sha:
+                        if (m := match('^refs/heads/(?P<branch>.*)', branch_ref)):
+                            branch = m['branch']
+                            tag(branch)
+                            tag(branch, python_version)
+            else:
+                print("Detected uncommitted changes; skipping Git SHA tag")
 
 def main():
     parser = ArgumentParser()
@@ -182,6 +199,7 @@ def main():
     parser.add_argument('-l','--latest',action='store_true',help='Only create "latest" tag. By default, a tag for the python version is also created, as well as for the current Git commit (if there are no uncommitted changes)')
     parser.add_argument('-p','--python-version',default='3.8.6',help='Python version to build base image against')
     parser.add_argument('-P','--push',action='store_true',help='Push built images')
+    parser.add_argument('-r','--ref',action='append',help='Ref-name(s) to include as tags of the built image (default: current tags and branches)')
     parser.add_argument('-t','--token',action='append',help='Token to log in to Docker Hub with (or multiple arguments of the form "<repository>=<token>")')
     parser.add_argument('-u','--username',action='append',help='User to log in to Docker Hub as (or multiple arguments of the form "<repository>=<username>")')
     parser.add_argument('--repository',default='runsascoded/gsmo',help='Docker repository for built image')
@@ -191,6 +209,7 @@ def main():
     dind = not args.no_dind
     python_version = args.python_version
     push = args.push
+    refs = args.ref
     repository = args.repository
     def parse_dict(attr):
         arg = getattr(args, attr)
@@ -228,6 +247,7 @@ def main():
         tokens=tokens,
         usernames=usernames,
         embed=embed,
+        refs=refs,
     )
 
     def build_img(dind):

@@ -3,7 +3,7 @@ from utz.setup import setup
 setup(
     install_requires=[
         'pyyaml',
-        'utz[setup]>=0.0.37',
+        'utz[setup]>=0.0.38',
     ],
     extras_require={
         'test': [
