@@ -1,4 +1,5 @@
 
+from gsmo import gsmo
 from utz import *
 
 
@@ -13,15 +14,65 @@ def example(name, ref=None):
                 run('git','reset','--hard',ref)
             yield
 
-args = ['-I']
-if 'GSMO_IMAGE' in env:
-    args += ['-i',env['GSMO_IMAGE']]
+
+
+def run_gsmo(*args, dind=False):
+    tag = env.get('GSMO_IMAGE_TAG')
+    if tag:
+        if dind:
+            img_tag = f':dind_{tag}'
+        else:
+            img_tag = tag
+    else:
+        if dind:
+            img_tag = ':dind'
+        else:
+            img_tag = ':latest'
+    gsmo.main('-I','-i',img_tag,'run',*args)
+
+
+def test_dind():
+    with example('dind',ref='e743604'):
+        run_gsmo('-x','docker-hello-world.ipynb', dind=True)
+        with open('nbs/docker-hello-world.ipynb','r') as f:
+            import json
+            nb = json.load(f)
+        cells = nb['cells']
+        assert len(cells) == 2
+        assert cells[0]['outputs'] == []
+        out = cells[1]['outputs']
+        assert all(o['name'] == 'stdout' for o in out)
+        assert ''.join([ ln for o in out for ln in o['text'] ]) == '''Running: docker run --rm hello-world
+
+Hello from Docker!
+This message shows that your installation appears to be working correctly.
+
+To generate this message, Docker took the following steps:
+ 1. The Docker client contacted the Docker daemon.
+ 2. The Docker daemon pulled the \"hello-world\" image from the Docker Hub.
+    (amd64)
+ 3. The Docker daemon created a new container from that image which runs the
+    executable that produces the output you are currently reading.
+ 4. The Docker daemon streamed that output to the Docker client, which sent it
+    to your terminal.
+
+To try something more ambitious, you can run an Ubuntu container with:
+ $ docker run -it ubuntu bash
+
+Share images, automate workflows, and more with a free Docker ID:
+ https://hub.docker.com/
+
+For more examples and ideas, visit:
+ https://docs.docker.com/get-started/
+
+
+'''
 
 
 def test_hailstone():
     with example('hailstone'):
         def step(value):
-            run('gsmo',*args,'run',)
+            run_gsmo()
             if value == 1:
                 return
             if value % 2 == 0:
@@ -48,7 +99,7 @@ def test_hailstone():
 
 def test_factors():
     with example('factors', ref='876c95c'):
-        run('gsmo',*args,'run',)
+        run_gsmo()
         tree = Repo().commit().tree
         assert tree['graph.png'].hexsha == '1ed114e1dd88d516ca749e516d24ef1d28fdb0de'
         assert tree['primes.png'].hexsha == '5189952fe9bcfb9f196b55bde9f6cc119b842017'

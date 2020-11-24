@@ -3,7 +3,7 @@ from os.path import basename, exists, isfile, join, sep
 from pathlib import Path
 from utz.collections import singleton
 from utz import o
-from utz.process import line
+from utz.process import check, line
 from sys import stderr
 
 from .err import OK, RAISE, WARN
@@ -19,6 +19,9 @@ CONFIG_XTNS = ['yaml','yml']
 DEFAULT_SRC_MOUNT_DIR = '/src'
 DEFAULT_RUN_NB = 'run.ipynb'
 DEFAULT_NB_DIR = 'nbs'
+
+DEFAULT_USER = 'gsmo'
+DEFAULT_GROUP = 'gsmo'
 
 class Config:
     def __init__(self, args):
@@ -124,17 +127,25 @@ def clean_mount(mount, err=RAISE):
 
 
 def clean_group(group, err=RAISE):
-    if exists(group):
-        return line('stat','-c','%g',group)
+    import grp
+    group = str(group)
+    if group.startswith(':'):
+        group = group[1:]
+        gid = grp.getgrgid(group).gr_gid
+    elif exists(group):
+        g = line('stat','-c','%g',group)
+        return g
     else:
-        warn = False
-        if err == RAISE:
-            err_ok = False
-        else:
-            err_ok = True
-            if err == WARN:
-                warn = True
-        ln = line('id','-g',group, err_ok=err_ok)
-        if ln is None and warn:
-            stderr.write('No group found for %s\n' % group)
-        return ln
+        try:
+            gid = grp.getgrgid(group).gr_gid
+        except Exception:
+            try:
+                gid = grp.getgrnam(group).gr_gid
+            except Exception:
+                msg = 'No group found for %s\n' % group
+                if err == RAISE:
+                    raise RuntimeError(msg)
+                if err == WARN:
+                    stderr.write('%s\n' % msg)
+                return None
+    return str(gid)

@@ -11,7 +11,8 @@ jobs:
           submodules: true
       - name: Fetch example submodule
         run: |
-          cd example/factors && git fetch --unshallow origin
+          pushd example/factors && git fetch --unshallow origin && popd
+          pushd example/dind && git fetch --unshallow origin && popd
       - name: Set up Python
         uses: actions/setup-python@v2
         with:
@@ -24,15 +25,15 @@ jobs:
       - name: Install gsmo, deps
         run: |
           pip install wheel
-          pip install pytest utz[setup]==0.0.36
+          pip install pytest utz[setup]==0.0.37
           pip install -e .
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v1
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v1
-      - name: "Docker: build and tag (non-DinD)"
+      - name: "Docker: build and tag"
         run: |
-          docker/build.sh -D -u runsascoded -t runsascoded/gsmo=${{ secrets.DOCKER_HUB_TOKEN }}
+          docker/build.sh
       - name: Run tests
         run: |
           git config --global user.name CI
