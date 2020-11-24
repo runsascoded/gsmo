@@ -455,6 +455,8 @@ def main(*args):
         entrypoint = '/gsmo/pip_entrypoint.sh'
 
     if dind:
+        args = [entrypoint] + args
+        entrypoint = '/gsmo/dind_entrypoint.sh'
         groups.append(docker_sock.gid)
 
     if run_mode:
