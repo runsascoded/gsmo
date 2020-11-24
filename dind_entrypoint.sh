@@ -4,6 +4,9 @@
 
 set -ex
 
+ls -l /var/run/docker.sock
 sudo chgrp docker /var/run/docker.sock
+sudo getent group docker
 sudo chmod g+w /var/run/docker.sock
+ls -l /var/run/docker.sock
 "$@"
