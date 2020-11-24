@@ -67,7 +67,11 @@ def main(*args):
     for arg in run_args:
         run_parser.add_argument(*arg.args, **arg.kwargs)
 
-    args = parser.parse_args(args)
+    if args:
+        args = parser.parse_args(args)
+    else:
+        args = parser.parse_args()
+
     jupyter_mode = shell_mode = run_mode = False
     cmd = getattr(args, 'cmd', None)
     if cmd =='jupyter':
