@@ -22,7 +22,6 @@ jobs:
         run: |
           git fetch --depth=1 origin +"$GITHUB_REF:$GITHUB_REF"
           git log --graph --oneline --decorate -n 10
-          id
       - name: Install gsmo, deps
         run: |
           pip install wheel
@@ -34,20 +33,14 @@ jobs:
         uses: docker/setup-buildx-action@v1
       - name: "Docker: build and tag"
         run: |
-          ls -l /var/run/docker.sock
           docker/build.sh
-          ls -l /var/run/docker.sock
       - name: Run tests
         run: |
           git config --global user.name CI
           git config --global user.email ci@ci.ci
           pytest -vs
-          ls -l /var/run/docker.sock
-          docker ps
       - name: "Docker: push"
         run: |
-          ls -l /var/run/docker.sock
-          id
           docker/build.sh --push -u runsascoded -t runsascoded/gsmo=${{ secrets.DOCKER_HUB_TOKEN }}
       - name: Install release dependencies
         if: "startsWith(github.ref, 'refs/tags/')"
