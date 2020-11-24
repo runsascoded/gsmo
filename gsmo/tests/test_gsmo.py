@@ -38,9 +38,9 @@ def test_dind():
             import json
             nb = json.load(f)
         cells = nb['cells']
-        assert len(cells) == 2
+        assert len(cells) == 6
         assert cells[0]['outputs'] == []
-        out = cells[1]['outputs']
+        out = cells[-1]['outputs']
         assert all(o['name'] == 'stdout' for o in out)
         assert ''.join([ ln for o in out for ln in o['text'] ]) == '''Running: docker run --rm hello-world
 
