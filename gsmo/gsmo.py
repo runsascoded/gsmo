@@ -205,7 +205,7 @@ def main(*args):
             raise ValueError(f'Unexpected keys in `pip` config dict (expected: "container" || ("img" ^ "image")): {keys}')
 
     tags = lists(get('tag'))
-    name = get('name', default=basename(cwd))
+    name = get('name', default=basename(input))
     skip_requirements_txt = args.skip_requirements_txt
     root = get('root')
 
