@@ -2,6 +2,7 @@ from utz.setup import setup
 
 setup(
     install_requires=[
+        'papermill',
         'pyyaml',
         'utz[setup]>=0.0.39',
     ],
