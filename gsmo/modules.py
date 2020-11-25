@@ -10,7 +10,7 @@ class Modules:
             raise RuntimeError('Specify at most one of {run,skip}: (%s, %s)' % (run, skip))
         self.runs = run
         self.skips = skip
-        self.conf = conf
+        self.conf = conf or {}
 
     def run(self, module, nb='run.ipynb', out='nbs', *args, **kwargs):
         if self.skips and module in self.skips:
@@ -20,7 +20,7 @@ class Modules:
             print(f'Module {module} not marked as "run"; skipping')
             return
 
-        module_kwargs = self.conf.get('module', {})
+        module_kwargs = self.conf.get(module, {})
         module_kwargs.update(kwargs)
 
         with cd(module):
