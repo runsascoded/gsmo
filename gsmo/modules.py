@@ -26,7 +26,7 @@ class Modules:
         with cd(module):
             execute(
                 nb,
-                out=out,
+                out,
                 *args,
                 **module_kwargs,
             )
