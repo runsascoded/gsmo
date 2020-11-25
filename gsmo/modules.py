@@ -1,4 +1,4 @@
-from gsmo import execute
+from .papermill import execute
 from utz import cd, sh
 
 
