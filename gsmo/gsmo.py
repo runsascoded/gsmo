@@ -182,8 +182,11 @@ def main(*args):
         default_image = DEFAULT_IMAGE
     base_image = get('image', default_image)
     if base_image.startswith(':'):
-        # shorthand for just specifying a runsascoded/gsmo tag
-        base_image = f'{DEFAULT_IMAGE_REPO}{base_image}'
+        if base_image == ':':
+            base_image = DEFAULT_IMAGE_REPO
+        else:
+            # shorthand for just specifying a runsascoded/gsmo tag
+            base_image = f'{DEFAULT_IMAGE_REPO}{base_image}'
     image = base_image
 
     use_docker = get('docker', True)
