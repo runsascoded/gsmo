@@ -116,9 +116,20 @@ def test_factors():
         assert tree['ints.parquet'].hexsha == '79ea92b9788a7424afc84674179db1b39c371111'
 
 
+def get_submodule_commit(sm_path):
+    parent_tree = Repo().commit().tree
+    sm_hexsha = parent_tree[sm_path].hexsha
+    return Repo(sm_path).commit(sm_hexsha)
+
+
 def test_submodules():
     with example('submodules', ref='6e2e388'):
         run_gsmo()
-        tree = Repo().commit().tree
-        gri = tree['generate-random-ints']
-        assert gri.hexsha == ''
+
+        sm_commit = get_submodule_commit('generate-random-ints')
+        lines = sm_commit.tree['out/ints.txt'].data_stream.read().decode().split('\n')
+        assert [ int(l) for l in lines if l ] == [ 6, 34, 11, 98, 52, 34, 13, 4, 48, 68, ]
+
+        sm_commit = get_submodule_commit('sort')
+        lines = sm_commit.tree['out/ints.txt'].data_stream.read().decode().split('\n')
+        assert [ int(l) for l in lines if l ] == [ 4, 6, 11, 13, 34, 48, 52, 68, 98, ]
