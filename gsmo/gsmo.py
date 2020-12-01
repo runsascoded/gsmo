@@ -454,7 +454,9 @@ def main(*args):
     if use_docker:
         container = process.json('docker','container','inspect',name, err_ok=True)
         if container:
+            container = singleton(container, dedupe=False)
             if container.get('State',{}).get('Running',False):
+                print(f'Will execute in existing container {name}')
                 run_in_existing_container = True
             else:
                 run('docker','container','rm',name)
@@ -547,18 +549,21 @@ def main(*args):
     workdir_args = [ '--workdir', workdir ]
     name_args = [ '--name', name ]
 
-    all_flags = \
+    exec_flags = \
         flags + \
         env_args + \
+        workdir_args
+
+    all_flags = \
+        exec_flags + \
         mount_args + \
         port_args + \
         user_args + \
-        workdir_args + \
         group_args
 
     if run_in_existing_container:
         all_args = \
-            all_flags + \
+            exec_flags + \
             [name] + \
             [entrypoint] + \
             args
@@ -626,11 +631,18 @@ def main(*args):
                             backoff_idx = 0
                             sleep_interval *= 1.6
         else:
-            run(
-                'docker','run',
-                all_args,
-                dry_run=dry_run,
-            )
+            if run_in_existing_container:
+                run(
+                    'docker','exec',
+                    all_args,
+                    dry_run=dry_run,
+                )
+            else:
+                run(
+                    'docker','run',
+                    all_args,
+                    dry_run=dry_run,
+                )
     else:
         if jupyter_src_port != jupyter_dst_port:
             raise ValueError(f'Mismatching jupyter ports in non-docker mode: {jupyter_src_port} != {jupyter_dst_port}')
