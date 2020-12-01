@@ -1,4 +1,4 @@
-from .papermill import execute
+from gsmo.papermill import execute
 from utz import cd, sh
 
 
@@ -24,6 +24,7 @@ class Modules:
         module_kwargs.update(kwargs)
 
         with cd(module):
+            print(f'module {module}')
             execute(
                 nb,
                 out,

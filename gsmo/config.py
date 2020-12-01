@@ -23,6 +23,9 @@ DEFAULT_NB_DIR = 'nbs'
 DEFAULT_USER = 'gsmo'
 DEFAULT_GROUP = 'gsmo'
 
+GSMO_DIR = '/gsmo'
+GH_REPO = 'runsascoded/gsmo'
+
 class Config:
     def __init__(self, args=None):
         self.args = args

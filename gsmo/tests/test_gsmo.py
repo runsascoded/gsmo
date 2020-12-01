@@ -1,4 +1,3 @@
-
 from gsmo import gsmo
 from utz import *
 
@@ -8,12 +7,11 @@ def example(name, ref=None):
     repo = Repo()
     dir = join(repo.working_dir, 'example', name)
     with TemporaryDirectory() as wd:
-        run('git','clone',dir,wd)
+        run('git','clone','--recurse-submodules',dir,wd)
         with cd(wd):
             if ref:
                 run('git','reset','--hard',ref)
             yield
-
 
 
 def run_gsmo(*args, dind=False):
@@ -27,7 +25,7 @@ def run_gsmo(*args, dind=False):
         if dind:
             img_tag = ':dind'
         else:
-            img_tag = ':latest'
+            img_tag = ':'
     gsmo.main('-I','-i',img_tag,'run',*args)
 
 
@@ -116,3 +114,11 @@ def test_factors():
         assert tree['graph.png'].hexsha == '6e432cd84a537648ec6559719c74e1b3021c707c'
         assert tree['primes.png'].hexsha == '107debbdfe8ae9c146d99ca97a5563201e0f8f22'
         assert tree['ints.parquet'].hexsha == '79ea92b9788a7424afc84674179db1b39c371111'
+
+
+def test_submodules():
+    with example('submodules', ref='6e2e388'):
+        run_gsmo()
+        tree = Repo().commit().tree
+        gri = tree['generate-random-ints']
+        assert gri.hexsha == ''

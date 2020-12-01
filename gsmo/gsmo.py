@@ -3,7 +3,7 @@
 from utz import *
 
 from .cli import Arg, run_args, load_run_config
-from .config import clean_group, clean_mount, lists, version, Config, DEFAULT_IMAGE_REPO, DEFAULT_SRC_MOUNT_DIR, DEFAULT_RUN_NB, IMAGE_HOME, DEFAULT_GROUP, DEFAULT_USER, DEFAULT_IMAGE, DEFAULT_DIND_IMAGE
+from .config import clean_group, clean_mount, lists, version, Config, DEFAULT_IMAGE_REPO, DEFAULT_SRC_MOUNT_DIR, DEFAULT_RUN_NB, IMAGE_HOME, DEFAULT_GROUP, DEFAULT_USER, DEFAULT_IMAGE, DEFAULT_DIND_IMAGE, GSMO_DIR
 from .err import OK, RAISE, WARN
 
 def main(*args):
@@ -203,6 +203,10 @@ def main(*args):
     if base_image.startswith(':'):
         if base_image == ':':
             base_image = DEFAULT_IMAGE_REPO
+            gsmo_root = dirname(dirname(__file__))
+            gsmo_mount = f'{gsmo_root}:{GSMO_DIR}'
+            print(f'adding gsmo mount: {gsmo_mount}')
+            mounts += [ gsmo_mount ]
         else:
             # shorthand for just specifying a runsascoded/gsmo tag
             base_image = f'{DEFAULT_IMAGE_REPO}{base_image}'
@@ -631,6 +635,7 @@ def main(*args):
                             backoff_idx = 0
                             sleep_interval *= 1.6
         else:
+            print(f'running from {cwd}')
             if run_in_existing_container:
                 run(
                     'docker','exec',

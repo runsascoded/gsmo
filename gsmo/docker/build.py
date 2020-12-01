@@ -2,11 +2,9 @@
 
 from utz import *
 
-from ..config import IMAGE_HOME
+from ..config import GH_REPO, GSMO_DIR, IMAGE_HOME
 
 VERSION_TAG_RGX = r'^v(?P<version>\d+\.\d+\.\d+)$'
-GSMO_DIR = '/gsmo'
-GH_REPO = 'runsascoded/gsmo'
 
 def build(
     repository: str,

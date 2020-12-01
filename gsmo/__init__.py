@@ -1,4 +1,4 @@
-from . import control
+from gsmo import control
 from .modules import Modules
 from .papermill import execute
 

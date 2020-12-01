@@ -4,7 +4,7 @@
 from inspect import getfullargspec
 import json
 from jupyter_client import kernelspec
-from os import makedirs, remove
+from os import getcwd, makedirs, remove
 from os.path import abspath, basename, dirname, exists, join, splitext
 from pathlib import Path
 from shutil import move
@@ -58,7 +58,7 @@ def execute(
     if not exists(input) and not input.endswith('.ipynb'):
         input += '.ipynb'
     if not exists(input):
-        raise ValueError(f"Nonexistent input notebook: {input}")
+        raise ValueError(f"Nonexistent input notebook: {input} (cwd: {cwd}/{getcwd()})")
     if commit:
         if not start_sha:
             start_sha = git.head.sha()
