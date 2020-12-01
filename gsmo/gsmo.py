@@ -371,9 +371,9 @@ def main(*args):
                 ENV(*[ l.strip() for l in f.readlines() ])
 
         default_labels = {
-            'cmd': cmd,
-            'path': cwd,
-            'version': version,
+            'gsmo.cmd': cmd,
+            'gsmo.path': cwd,
+            'gsmo.version': version,
         }
         LABEL(**default_labels)
 
