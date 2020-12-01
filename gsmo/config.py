@@ -24,7 +24,7 @@ DEFAULT_USER = 'gsmo'
 DEFAULT_GROUP = 'gsmo'
 
 class Config:
-    def __init__(self, args):
+    def __init__(self, args=None):
         self.args = args
         config_paths = [
             f

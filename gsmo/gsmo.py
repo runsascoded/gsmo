@@ -3,7 +3,7 @@
 from utz import *
 
 from .cli import Arg, run_args, load_run_config
-from .config import clean_group, clean_mount, lists, Config, DEFAULT_IMAGE_REPO, DEFAULT_SRC_MOUNT_DIR, DEFAULT_RUN_NB, IMAGE_HOME, DEFAULT_GROUP, DEFAULT_USER, DEFAULT_IMAGE, DEFAULT_DIND_IMAGE
+from .config import clean_group, clean_mount, lists, version, Config, DEFAULT_IMAGE_REPO, DEFAULT_SRC_MOUNT_DIR, DEFAULT_RUN_NB, IMAGE_HOME, DEFAULT_GROUP, DEFAULT_USER, DEFAULT_IMAGE, DEFAULT_DIND_IMAGE
 from .err import OK, RAISE, WARN
 
 def main(*args):
@@ -32,6 +32,8 @@ def main(*args):
         Arg('-I','--no-interactive',default=None,action='store_true',help="Don't run interactively / allocate a TTY (i.e. skip `-it` flags to `docker run`)"),
         Arg('-g','--image-group',help='Create a group with this name inside the Docker image (with same GID as the current host-machine group; empty string implies using the current host-machine group name)'),
         Arg('-G','--group',action='append',help="Additional groups to add docker image user to"),
+        Arg('-l','--label',action='append',help='Labels to apply to run container, in k=v format'),
+        Arg('-L','--label-file',help='File with labels to apply to run container, in k=v format'),
         Arg('-M','--missing-paths',default=0,action='count',help='Relax checking of paths (for propagating mounts and groups into Docker): 1x ⟹ warn, 2x ⟹ ignore'),
         Arg('-n','--dry-run',action='count',default=0,help="Prepare and print run cmd (including building Docker image), but don't execute it. If passed twice, stop before building Docker image"),
         Arg('--name',help='Container name (defaults to directory basename)'),
@@ -143,6 +145,18 @@ def main(*args):
 
     image_env_file = get('env_file')
 
+    # Load container labels
+    labels = get('label', [])
+    if isinstance(labels, (list, tuple)):
+        labels = dict([
+            env.split('=', 1)
+            for env in labels
+        ])
+    elif labels is not None and not isinstance(labels, dict):
+        raise ValueError(f'Unexpected env dict: {labels}')
+
+    labels_file = get('label_file')
+
     # Load env var configs
     container_envs = get('container_env', [])
     if isinstance(container_envs, (list, tuple)):
@@ -180,7 +194,12 @@ def main(*args):
         mounts += [ '/var/run/docker.sock:/var/run/docker.sock' ]
     else:
         default_image = DEFAULT_IMAGE
-    base_image = get('image', default_image)
+    base_image = get('image')
+    if base_image:
+        explict_base_img = True
+    else:
+        explict_base_img = False
+        base_image = default_image
     if base_image.startswith(':'):
         if base_image == ':':
             base_image = DEFAULT_IMAGE_REPO
@@ -195,20 +214,20 @@ def main(*args):
     ports = lists(get('port'))
     apts = lists(get('apt'))
     container_pips = lists(get('container_pip')) + lists(get('pie'))
-    pips = get('pip')
+    pips = get('pip', [])
     if isinstance(pips, dict):
         keys = pips.keys()
         if 'container' in keys: container_pips += pips.pop('container')
         if 'img' in keys:
             assert 'image' not in keys
-            pips = lists(pips.pop('img'))
+            pips = pips.pop('img')
         elif 'image' in keys:
-            pips = lists(pips.pop('image'))
+            pips = pips.pop('image')
         if keys:
             raise ValueError(f'Unexpected keys in `pip` config dict (expected: "container" || ("img" ^ "image")): {keys}')
 
     tags = lists(get('tag'))
-    name = get('name', default=basename(cwd))
+    name = get('name', default=basename(cwd)).lower()
     skip_requirements_txt = args.skip_requirements_txt
     root = get('root')
 
@@ -302,9 +321,8 @@ def main(*args):
     # based from it; otherwise, use an extant upstream image
     build_image = False
 
-    # docker_gid = None
     dockerfile = join(cwd, 'Dockerfile')
-    if exists(dockerfile):
+    if exists(dockerfile) and not explict_base_img:
         build_image = True
         extend = dockerfile
     else:
@@ -328,7 +346,11 @@ def main(*args):
         reqs_txt = join(cwd, 'requirements.txt')
         if exists(reqs_txt) and not skip_requirements_txt:
             with open(reqs_txt, 'r') as f:
-                pips += [ line.rstrip('\n') for line in f.readlines() if line ]
+                pips += [
+                    f'"{dep}"'
+                    for line in f.readlines()
+                    if (dep := line.rstrip('\n'))
+                ]
 
         if pips:
             if use_docker:
@@ -347,6 +369,22 @@ def main(*args):
             build_image = True
             with open(image_env_file,'r') as f:
                 ENV(*[ l.strip() for l in f.readlines() ])
+
+        default_labels = {
+            'cmd': cmd,
+            'path': cwd,
+            'version': version,
+        }
+        LABEL(**default_labels)
+
+        if labels:
+            build_image = True
+            LABEL(**labels)
+
+        if labels_file:
+            build_image = True
+            with open(labels_file,'r') as f:
+                LABEL(*[ l.strip() for l in f.readlines() ])
 
         if use_docker:
             if image_user or image_group or sudo or dind:
@@ -412,9 +450,14 @@ def main(*args):
             user_args = [ '-u', f'{uid}:{gid}' ]
 
     # Remove any existing container
+    run_in_existing_container = False
     if use_docker:
-        if check('docker','container','inspect',name):
-            run('docker','container','rm',name)
+        container = process.json('docker','container','inspect',name, err_ok=True)
+        if container:
+            if container.get('State',{}).get('Running',False):
+                run_in_existing_container = True
+            else:
+                run('docker','container','rm',name)
 
     interactive = not args.no_interactive
     if interactive:
@@ -423,7 +466,8 @@ def main(*args):
         flags = []
     if rm:
         assert use_docker
-        flags += ['--rm']
+        if not run_in_existing_container:
+            flags += ['--rm']
 
     run_nb = get('run', DEFAULT_RUN_NB)
 
@@ -501,36 +545,57 @@ def main(*args):
     group_args = [ [ '--group-add', group ] for group in groups ]
     entrypoint_args = [ '--entrypoint', entrypoint ]
     workdir_args = [ '--workdir', workdir ]
+    name_args = [ '--name', name ]
 
-    all_args = \
+    all_flags = \
         flags + \
-        entrypoint_args + \
         env_args + \
         mount_args + \
         port_args + \
         user_args + \
         workdir_args + \
-        group_args + \
-        [image] + \
-        args
+        group_args
+
+    if run_in_existing_container:
+        all_args = \
+            all_flags + \
+            [name] + \
+            [entrypoint] + \
+            args
+    else:
+        all_args = \
+            all_flags + \
+            entrypoint_args + \
+            name_args + \
+            [image] + \
+            args
 
     if use_docker:
         if jupyter_mode and check('which', 'open'):
             # 1. run docker container in detached mode
             # 2. parse+open jupyter token URL in browser (try every 1s)
             # 3. re-attach container
-            cmd = [
-                'docker','run',
-                '-w',dst,
-                '-d',
-                '--name',name,
-                all_args,
-            ]
+            if run_in_existing_container:
+                cmd = [
+                    'docker','exec',
+                    '-d',
+                    all_args,
+                ]
+            else:
+                cmd = [
+                    'docker','run',
+                    '-d',
+                    all_args,
+                ]
             if dry_run:
                 run(*cmd, dry_run=True)
             else:
                 run(*cmd)
+                sleep_interval = 0.5
+                backoff_idx = 0
+                backoff_cutoff = 5
                 while True:
+                    sleep(sleep_interval)
                     lns = lines('docker','exec',name,'jupyter','notebook','list')
                     if lns[0] != 'Currently running servers:':
                         raise Exception('Unexpected `jupyter notebook list` output:\n\t%s' % "\n\t".join(lns))
@@ -555,14 +620,14 @@ def main(*args):
                                 run('docker','attach',name)
                         break
                     else:
-                        SLEEP_INTERVAL = 1
-                        print(f'No Jupyter server found in container {name}; sleep {SLEEP_INTERVAL}s…')
-                        sleep(SLEEP_INTERVAL)
+                        print(f'No Jupyter server found in container {name}; sleep {sleep_interval}s…')
+                        backoff_idx += 1
+                        if backoff_idx == backoff_cutoff:
+                            backoff_idx = 0
+                            sleep_interval *= 1.6
         else:
             run(
                 'docker','run',
-                '-w',dst,
-                '--name',name,
                 all_args,
                 dry_run=dry_run,
             )
