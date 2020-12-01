@@ -13,6 +13,7 @@ jobs:
         run: |
           pushd example/factors && git fetch --unshallow origin && popd
           pushd example/dind && git fetch --unshallow origin && popd
+          pushd example/submodules && git fetch --unshallow origin && popd
       - name: Set up Python
         uses: actions/setup-python@v2
         with:

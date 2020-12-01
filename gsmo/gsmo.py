@@ -610,7 +610,7 @@ def main(*args):
                         raise Exception('Unexpected `jupyter notebook list` output:\n\t%s' % "\n\t".join(lns))
                     if len(lns) == 2:
                         ln = lns[1]
-                        rgx = f'(?P<url>http://0\.0\.0\.0:(?P<port>\d+)/\?token=(?P<token>[0-9a-f]+)) :: {jupyter_dir}'
+                        rgx = r'(?P<url>http://0\.0\.0\.0:(?P<port>\d+)/\?token=(?P<token>[0-9a-f]+)) :: {jupyter_dir}'
                         if not (m := match(rgx, ln)):
                             raise RuntimeError(f'Unrecognized notebook server line: {ln}')
                         if m['port'] != str(jupyter_dst_port):
