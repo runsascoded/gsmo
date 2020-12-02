@@ -6,7 +6,8 @@ from utz import *
 def example(name, ref=None):
     repo = Repo()
     dir = join(repo.working_dir, 'example', name)
-    with TemporaryDirectory() as wd:
+    with TemporaryDirectory() as tmpdir:
+        wd = join(tmpdir, name)
         run('git','clone','--recurse-submodules',dir,wd)
         with cd(wd):
             if ref:
