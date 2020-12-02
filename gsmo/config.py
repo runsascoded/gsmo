@@ -1,7 +1,6 @@
 
 from os.path import basename, exists, isfile, join, sep
 from pathlib import Path
-from utz.collections import singleton
 from utz import o
 from utz.process import check, line
 from sys import stderr
@@ -14,8 +13,7 @@ DEFAULT_IMAGE_REPO = 'runsascoded/gsmo'
 DEFAULT_IMAGE = f'{DEFAULT_IMAGE_REPO}:{version}'
 DEFAULT_DIND_IMAGE = f'{DEFAULT_IMAGE_REPO}:dind_{version}'
 IMAGE_HOME = '/home'
-DEFAULT_CONFIG_STEMS = ['gsmo','config']
-CONFIG_XTNS = ['yaml','yml']
+DEFAULT_CONFIG_FILE = 'gsmo.yml'
 DEFAULT_SRC_MOUNT_DIR = '/src'
 DEFAULT_RUN_NB = 'run.ipynb'
 DEFAULT_NB_DIR = 'nbs'
@@ -29,22 +27,12 @@ GH_REPO = 'runsascoded/gsmo'
 class Config:
     def __init__(self, args=None):
         self.args = args
-        config_paths = [
-            f
-            for stem in DEFAULT_CONFIG_STEMS
-            for xtn in CONFIG_XTNS
-            if exists(f := f'{stem}.{xtn}')
-        ]
-
-        if config_paths:
-            config_path = singleton(config_paths)
+        if exists(DEFAULT_CONFIG_FILE):
             import yaml
-            with open(config_path,'r') as f:
-                config = o(yaml.safe_load(f))
+            with open(DEFAULT_CONFIG_FILE,'r') as f:
+                self.config = o(yaml.safe_load(f))
         else:
-            config = o()
-
-        self.config = config
+            self.config = o()
 
     def get(self, keys, default=None):
         if isinstance(keys, str):
