@@ -29,7 +29,7 @@ class Modules:
         module_kwargs.update(kwargs)
 
         with cd(module):
-            print(f'module {module}')
+            print(f'Running module: {module}')
             if dind is not False:
                 with NamedTemporaryFile() as tmp:
                     with open(tmp.name,'w') as f:

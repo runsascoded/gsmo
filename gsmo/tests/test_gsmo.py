@@ -15,7 +15,7 @@ def example(name, ref=None):
             yield
 
 
-def run_gsmo(*args, dind=False):
+def run_gsmo(*args, dind=False, dst=None):
     tag = env.get('GSMO_IMAGE_TAG')
     if tag:
         if dind:
@@ -27,7 +27,10 @@ def run_gsmo(*args, dind=False):
             img_tag = ':dind'
         else:
             img_tag = ':'
-    gsmo.main('-I','-i',img_tag,'run',*args)
+    flags = ['-I','-i',img_tag]
+    if dst:
+        flags += ['--dst',dst]
+    gsmo.main(*flags,'run',*args)
 
 
 def test_dind():
@@ -124,7 +127,7 @@ def get_submodule_commit(sm_path):
 
 
 def test_submodules():
-    with example('submodules', ref='6e2e388'):
+    with example('submodules', ref='c291a70'):
         run_gsmo()
 
         sm_commit = get_submodule_commit('generate-random-ints')

@@ -117,16 +117,24 @@ def main(*args):
         if keys:
             raise ValueError(f'Unexpected keys in `pip` config dict (expected: "container" || ("img" ^ "image")): {keys}')
 
+    gsmo_root = env.get('GSMO_ROOT')
     dst = get('dst', env.get('GSMO_DST'))
-    orig_dst = dst
-    if dst:
-        gsmo_dir = join(dst, GSMO_DIR_NAME)
-        dst = join(dst, DEFAULT_SRC_DIR_NAME)
-        container_pips += [gsmo_dir]
+    gsmo_dir = env.get('GSMO_DIR')
+    if gsmo_root:
+        if not gsmo_dir:
+            gsmo_dir = join(gsmo_root, GSMO_DIR_NAME)
+        if dst:
+            if not abspath(dst):
+                dst = join(gsmo_root, dst)
+        else:
+            dst = join(gsmo_root, DEFAULT_SRC_DIR_NAME)
     else:
-        dst = DEFAULT_SRC_MOUNT_DIR
-        orig_dst = dst
-        gsmo_dir = GSMO_DIR
+        gsmo_root = '/'
+        if not gsmo_dir:
+            gsmo_dir = GSMO_DIR
+        if not dst:
+            dst = DEFAULT_SRC_MOUNT_DIR
+    print(f'gsmo_dir: {gsmo_dir}, dst {dst} (root {gsmo_root})')
     src = cwd
 
     jupyter_dir = get('dir') or dst
@@ -271,10 +279,11 @@ def main(*args):
     image = base_image
 
     if dev_mode:
-        gsmo_root = dirname(dirname(__file__))
-        gsmo_mount = dind_mnt(gsmo_root, gsmo_dir)
-        print(f'Adding gsmo mount: {gsmo_mount}')
+        gsmo_dev_dir = dirname(dirname(__file__))
+        gsmo_mount = dind_mnt(gsmo_dev_dir, gsmo_dir)
+        print(f'Adding gsmo mount and container editable-pip: {gsmo_mount}')
         mounts += gsmo_mount
+        container_pips += [gsmo_dir]
 
     use_docker = get('docker', True)
     rm = get('remove_container')
@@ -422,11 +431,13 @@ def main(*args):
 
         default_kvs = {
             'cmd': cmd,
+            'dir': gsmo_dir,
             'dev_mode': dev_mode,
-            'dst': orig_dst,
+            'dst': dst,
             'image': base_image,
             'mounts': str(mounts),
             'path': cwd,
+            'root': gsmo_root,
             'version': version,
         }
 
@@ -576,10 +587,12 @@ def main(*args):
     if run_mode:
         RUN_CONFIG_YML_PATH = '/run_config.yml'
         if run_config:
-            run_config_path = NamedTemporaryFile(dir=gsmo_dir, suffix='.yml', delete=False)
-            with open(run_config_path.name,'w') as f:
+            run_config_file = NamedTemporaryFile(dir=gsmo_dir, suffix='.yml', delete=False)
+            run_config_path = run_config_file.name
+            print(f'Writing run config to {run_config_path} (gsmo dir: {gsmo_dir})')
+            with open(run_config_path,'w') as f:
                 yaml.safe_dump(dict(run_config), f, sort_keys=False)
-            mounts += dind_mnt(run_config_path.name, RUN_CONFIG_YML_PATH)
+            mounts += dind_mnt(run_config_path, RUN_CONFIG_YML_PATH)
             args += [ '-Y',RUN_CONFIG_YML_PATH ]
 
     def get_git_id(k, fmt):
