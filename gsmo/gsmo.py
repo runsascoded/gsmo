@@ -3,8 +3,9 @@
 from utz import *
 
 from .cli import Arg, run_args, load_run_config
-from .config import clean_group, clean_mount, lists, version, Config, DEFAULT_IMAGE_REPO, DEFAULT_SRC_MOUNT_DIR, DEFAULT_RUN_NB, IMAGE_HOME, DEFAULT_GROUP, DEFAULT_USER, DEFAULT_IMAGE, DEFAULT_DIND_IMAGE, GSMO_DIR
+from .config import clean_group, lists, version, Config, DEFAULT_IMAGE_REPO, DEFAULT_SRC_DIR_NAME, DEFAULT_SRC_MOUNT_DIR, DEFAULT_RUN_NB, IMAGE_HOME, DEFAULT_GROUP, DEFAULT_USER, DEFAULT_IMAGE, DEFAULT_DIND_IMAGE, GSMO_DIR, GSMO_DIR_NAME
 from .err import OK, RAISE, WARN
+from .mount import Mount, Mounts
 
 def main(*args):
     parser = ArgumentParser()
@@ -21,6 +22,7 @@ def main(*args):
     docker_args = [
         Arg('-a','--apt',help='Comma-separated list of packages to apt-get install'),
         Arg('-b','--build-arg',action='append',help='Comma-separated list of packages to apt-get install'),
+        Arg('--dev',default=None,action='store_true',help="Run in dev mode: use a 'latest' Docker image tag (':latest' or ':dind') and mount this gsmo directory into the Docker image (as /gsmo)"),
         Arg('--dind',default=None,action='store_true',help="When set, mount /var/run/docker.sock in container (and default to a base image that contains docker installed)"),
         Arg('--dst',help='Path inside Docker container to mount current directory/repo to (default: /src)'),
         Arg('-e','--env','--image-env',action='append',help='Environment variables to set in Docker image (at build time)'),
@@ -102,7 +104,29 @@ def main(*args):
     config = Config(args)
     get = partial(Config.get, config)
 
-    dst = get('dst',DEFAULT_SRC_MOUNT_DIR)
+    container_pips = lists(get('container_pip')) + lists(get('pie'))
+    pips = get('pip', [])
+    if isinstance(pips, dict):
+        keys = pips.keys()
+        if 'container' in keys: container_pips += pips.pop('container')
+        if 'img' in keys:
+            assert 'image' not in keys
+            pips = pips.pop('img')
+        elif 'image' in keys:
+            pips = pips.pop('image')
+        if keys:
+            raise ValueError(f'Unexpected keys in `pip` config dict (expected: "container" || ("img" ^ "image")): {keys}')
+
+    dst = get('dst', env.get('GSMO_DST'))
+    orig_dst = dst
+    if dst:
+        gsmo_dir = join(dst, GSMO_DIR_NAME)
+        dst = join(dst, DEFAULT_SRC_DIR_NAME)
+        container_pips += [gsmo_dir]
+    else:
+        dst = DEFAULT_SRC_MOUNT_DIR
+        orig_dst = dst
+        gsmo_dir = GSMO_DIR
     src = cwd
 
     jupyter_dir = get('dir') or dst
@@ -171,6 +195,8 @@ def main(*args):
 
     commit = lists(get('commit'))
 
+    dev_mode = get('dev', env.get('GSMO_DEV_MODE', False))
+
     missing_paths = get('missing_paths')
     if missing_paths == 1:
         missing_paths = WARN
@@ -185,13 +211,43 @@ def main(*args):
     out = get('out') or 'nbs'
 
     mounts = lists(get('mount', []))
-    mounts = [ m for mount in mounts if (m := clean_mount(mount, err=missing_paths)) ]
-    mounts += [ f'{src}:{dst}', ]
+    mounts = Mounts(mounts, err=missing_paths)
+    env_mnts = env.get('GSMO_MOUNTS')
+    if env_mnts:
+        env_mnts = Mounts(env_mnts, keep_missing=True)
+
+    def dind_mnt(src, dst):
+        mnt = Mount(src, dst, err=missing_paths)
+        print(f'inspecting mount {mnt} for re-mapping: {env_mnts}')
+        if env_mnts:
+            dst2src = env_mnts.dst2src
+            dir = src
+            relpath = None
+            while True:
+                if dir in dst2src:
+                    host_src = dst2src[dir]
+                    if relpath:
+                        host_src = join(host_src, relpath)
+                    host_mnt = Mount(host_src,dst,keep_missing=True)
+                    print(f'Re-mapping mount {mnt} to host src: {host_mnt}')
+                    return host_mnt
+                parent = dirname(dir)
+                if parent == dir:
+                    break
+                if not relpath:
+                    relpath = basename(dir)
+                else:
+                    relpath = join(basename(dir), relpath)
+                dir = parent
+        return mnt
+
+    mounts = Mounts([ dind_mnt(m.src, m.dst) for m in mounts.mounts ])
+    mounts += dind_mnt(src, dst)
 
     dind = get('dind')
     if dind:
         default_image = DEFAULT_DIND_IMAGE
-        mounts += [ '/var/run/docker.sock:/var/run/docker.sock' ]
+        mounts += Mount('/var/run/docker.sock', err=RAISE)
     else:
         default_image = DEFAULT_IMAGE
     base_image = get('image')
@@ -201,34 +257,30 @@ def main(*args):
         explict_base_img = False
         base_image = default_image
     if base_image.startswith(':'):
-        if base_image == ':':
-            base_image = DEFAULT_IMAGE_REPO
-            gsmo_root = dirname(dirname(__file__))
-            gsmo_mount = f'{gsmo_root}:{GSMO_DIR}'
-            print(f'adding gsmo mount: {gsmo_mount}')
-            mounts += [ gsmo_mount ]
+        if base_image == ':' or base_image == ':dind':
+            if dind:
+                base_image = ':dind'
+            if base_image == ':':
+                base_image = DEFAULT_IMAGE_REPO
+            else:
+                base_image = f'{DEFAULT_IMAGE_REPO}{base_image}'
+            dev_mode = True
         else:
             # shorthand for just specifying a runsascoded/gsmo tag
             base_image = f'{DEFAULT_IMAGE_REPO}{base_image}'
     image = base_image
+
+    if dev_mode:
+        gsmo_root = dirname(dirname(__file__))
+        gsmo_mount = dind_mnt(gsmo_root, gsmo_dir)
+        print(f'Adding gsmo mount: {gsmo_mount}')
+        mounts += gsmo_mount
 
     use_docker = get('docker', True)
     rm = get('remove_container')
 
     ports = lists(get('port'))
     apts = lists(get('apt'))
-    container_pips = lists(get('container_pip')) + lists(get('pie'))
-    pips = get('pip', [])
-    if isinstance(pips, dict):
-        keys = pips.keys()
-        if 'container' in keys: container_pips += pips.pop('container')
-        if 'img' in keys:
-            assert 'image' not in keys
-            pips = pips.pop('img')
-        elif 'image' in keys:
-            pips = pips.pop('image')
-        if keys:
-            raise ValueError(f'Unexpected keys in `pip` config dict (expected: "container" || ("img" ^ "image")): {keys}')
 
     tags = lists(get('tag'))
     name = get('name', default=basename(cwd)).lower()
@@ -248,6 +300,9 @@ def main(*args):
     if 'g' in id_attrs or 'group' in id_attrs: image_group = id.group
     if 'r' in id_attrs or 'root' in id_attrs: root = True
     if 's' in id_attrs or 'sudo' in id_attrs: sudo = True
+
+    if container_pips:
+        sudo = True
 
     dry_run = get('dry_run')
 
@@ -365,21 +420,28 @@ def main(*args):
                 print(f'pip install {" ".join(pips)}')
                 pip.main(['install'] + pips)
 
+        default_kvs = {
+            'cmd': cmd,
+            'dev_mode': dev_mode,
+            'dst': orig_dst,
+            'image': base_image,
+            'mounts': str(mounts),
+            'path': cwd,
+            'version': version,
+        }
+
+        ENV({ f'GSMO_{k.upper()}':v for k,v in default_kvs.items()})
+
         if image_envs:
             build_image = True
-            ENV(**image_envs)
+            ENV(image_envs)
 
         if image_env_file:
             build_image = True
             with open(image_env_file,'r') as f:
                 ENV(*[ l.strip() for l in f.readlines() ])
 
-        default_labels = {
-            'gsmo.cmd': cmd,
-            'gsmo.path': cwd,
-            'gsmo.version': version,
-        }
-        LABEL(**default_labels)
+        LABEL({ f'gsmo.{k}':v for k,v in default_kvs.items()})
 
         if labels:
             build_image = True
@@ -504,20 +566,20 @@ def main(*args):
 
     if container_pips:
         args = [ len(container_pips) ] + container_pips + [ entrypoint ] + args
-        entrypoint = '/gsmo/pip_entrypoint.sh'
+        entrypoint = join(gsmo_dir,'pip_entrypoint.sh')
 
     if dind:
         args = [entrypoint] + args
-        entrypoint = '/gsmo/dind_entrypoint.sh'
+        entrypoint = join(gsmo_dir,'dind_entrypoint.sh')
         groups.append(docker_sock.gid)
 
     if run_mode:
         RUN_CONFIG_YML_PATH = '/run_config.yml'
         if run_config:
-            run_config_path = NamedTemporaryFile(delete=False)
+            run_config_path = NamedTemporaryFile(dir=gsmo_dir, suffix='.yml', delete=False)
             with open(run_config_path.name,'w') as f:
                 yaml.safe_dump(dict(run_config), f, sort_keys=False)
-            mounts += [ f'{run_config_path.name}:{RUN_CONFIG_YML_PATH}' ]
+            mounts += dind_mnt(run_config_path.name, RUN_CONFIG_YML_PATH)
             args += [ '-Y',RUN_CONFIG_YML_PATH ]
 
     def get_git_id(k, fmt):
@@ -546,7 +608,6 @@ def main(*args):
     # Build Docker CLI args
     env_args = [ [ '-e', f'{k}={v}' ] for k, v in container_envs.items() ]
     if container_env_file: env_args += [ '--env-file', container_env_file ]
-    mount_args = [ [ '-v', mount ] for mount in mounts ]
     port_args = [ [ '-p', port ] for port in ports ]
     group_args = [ [ '--group-add', group ] for group in groups ]
     entrypoint_args = [ '--entrypoint', entrypoint ]
@@ -558,9 +619,10 @@ def main(*args):
         env_args + \
         workdir_args
 
+    print(f'mounts: {mounts}')
     all_flags = \
         exec_flags + \
-        mount_args + \
+        mounts.args() + \
         port_args + \
         user_args + \
         group_args

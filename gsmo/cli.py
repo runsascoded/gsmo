@@ -1,4 +1,5 @@
-
+from os import listdir
+from os.path import isdir
 import yaml
 
 class Arg:
@@ -21,6 +22,8 @@ def load_run_config(args):
     run_config = {}
     if (run_config_yaml_paths := args.yaml_path):
         for run_config_yaml_path in run_config_yaml_paths:
+            if isdir(run_config_yaml_path):
+                raise RuntimeError(f'run_config_yaml_path {run_config_yaml_path} is a directory: {listdir(run_config_yaml_path)}')
             with open(run_config_yaml_path,'r') as f:
                 run_config.update(yaml.safe_load(f))
 

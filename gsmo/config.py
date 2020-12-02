@@ -14,14 +14,16 @@ DEFAULT_IMAGE = f'{DEFAULT_IMAGE_REPO}:{version}'
 DEFAULT_DIND_IMAGE = f'{DEFAULT_IMAGE_REPO}:dind_{version}'
 IMAGE_HOME = '/home'
 DEFAULT_CONFIG_FILE = 'gsmo.yml'
-DEFAULT_SRC_MOUNT_DIR = '/src'
+DEFAULT_SRC_DIR_NAME = 'src'
+DEFAULT_SRC_MOUNT_DIR = f'/{DEFAULT_SRC_DIR_NAME}'
 DEFAULT_RUN_NB = 'run.ipynb'
 DEFAULT_NB_DIR = 'nbs'
 
 DEFAULT_USER = 'gsmo'
 DEFAULT_GROUP = 'gsmo'
 
-GSMO_DIR = '/gsmo'
+GSMO_DIR_NAME = 'gsmo'
+GSMO_DIR = f'/{GSMO_DIR_NAME}'
 GH_REPO = 'runsascoded/gsmo'
 
 
@@ -87,35 +89,6 @@ def get_name(config):
     if 'name' in config:
         return config['name']
     return Path.cwd().name
-
-
-def clean_mount(mount, err=RAISE):
-    pieces = mount.split(':')
-    if len(pieces) == 1:
-        src = pieces[0]
-        dst = '/%s' % src
-        pieces = [ src, dst ]
-
-    if len(pieces) != 2:
-        raise Exception('Invalid mount spec: %s' % mount)
-
-    [ src, dst ] = pieces
-    from os.path import abspath, expanduser, expandvars, realpath
-    def expand(path): return expandvars(expanduser(path))
-    src = realpath(abspath(expand(src)))
-    dst = expand(dst)
-    if isfile(src) and dst.endswith(sep):
-        dst = join(dst, basename(src))
-    if not exists(src):
-        msg = f"Mount src doesn't exist: {src}"
-        if err == RAISE:
-            raise ValueError(msg)
-        if err == WARN:
-            stderr.write('%s\n' % msg)
-        else:
-            assert err == OK
-        return None
-    return '%s:%s' % (src, dst)
 
 
 def clean_group(group, err=RAISE):

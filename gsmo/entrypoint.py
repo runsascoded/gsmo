@@ -30,14 +30,28 @@ def main():
     dir = get('dir')
     if dir: chdir(dir)
 
-    execute(
+    kwargs = dict(
         input=nb,
         output=out,
         cwd=getcwd(),
         progress_bar=progress_bar,
         commit=commit,
-        **run_config,
     )
+
+    for k,v in run_config.items():
+        if k == 'commit':
+            if commit is True:
+                kwargs['commit'] = v
+            else:
+                kwargs[k] = commit + v
+        else:
+            if k in kwargs:
+                print(f'Overwriting {k}={v} with run_config value {v}')
+            kwargs[k] = v
+
+    print(f'kwargs: {kwargs}, run_config: {run_config}')
+
+    execute(**kwargs)
 
 if __name__ == '__main__':
     main()
