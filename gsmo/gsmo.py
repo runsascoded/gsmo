@@ -516,7 +516,7 @@ def main(*args):
         if run_config:
             run_config_path = NamedTemporaryFile(delete=False)
             with open(run_config_path.name,'w') as f:
-                yaml.safe_dump(dict(run_config), f)
+                yaml.safe_dump(dict(run_config), f, sort_keys=False)
             mounts += [ f'{run_config_path.name}:{RUN_CONFIG_YML_PATH}' ]
             args += [ '-Y',RUN_CONFIG_YML_PATH ]
 

@@ -2,7 +2,7 @@
 from os.path import basename, exists, isfile, join, sep
 from pathlib import Path
 from utz import o
-from utz.process import check, line
+from utz.process import line
 from sys import stderr
 
 from .err import OK, RAISE, WARN
@@ -23,6 +23,7 @@ DEFAULT_GROUP = 'gsmo'
 
 GSMO_DIR = '/gsmo'
 GH_REPO = 'runsascoded/gsmo'
+
 
 class Config:
     def __init__(self, args=None):
