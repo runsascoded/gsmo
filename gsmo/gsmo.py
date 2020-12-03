@@ -8,6 +8,7 @@ from .err import OK, RAISE, WARN
 from .mount import Mount, Mounts
 
 def main(*args):
+    print(f'gsmo.main({args})')
     parser = ArgumentParser()
     parser.add_argument('input',nargs='?',help='Input directory containing run.ipynb (and optionally gsmo.yml, or other path specified by "-y"); defaults to current directory')
 
@@ -587,6 +588,10 @@ def main(*args):
                 yaml.safe_dump(dict(run_config), f, sort_keys=False)
             mounts += dind_mnt(run_config_path, RUN_CONFIG_YML_PATH)
             args += [ '-Y',RUN_CONFIG_YML_PATH ]
+        else:
+            print('no run config')
+    else:
+        print('no run mode')
 
     def get_git_id(k, fmt):
         try:
