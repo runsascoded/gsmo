@@ -66,7 +66,7 @@ def build(
         RUN(
             'echo "deb http://ftp.us.debian.org/debian testing main" >> /etc/apt/sources.list',
             'apt-get update',
-            'apt-get install -y -o APT::Immediate-Configure=0 curl gcc g++ git nano',
+            'apt-get install -y -o APT::Immediate-Configure=0 curl gcc g++ git nano sudo',
             'apt-get clean all',
             'rm -rf /var/lib/apt/lists',
         )
@@ -120,7 +120,7 @@ def build(
         if dind:
             RUN(
                 'apt-get update',
-                'apt-get install -y apt-transport-https ca-certificates gnupg2 software-properties-common sudo',
+                'apt-get install -y apt-transport-https ca-certificates gnupg2 software-properties-common',
                 'curl -fsSL https://download.docker.com/linux/debian/gpg | apt-key add -',
                 'add-apt-repository "deb [arch=amd64] https://download.docker.com/linux/debian buster stable"',
                 'apt-get update',

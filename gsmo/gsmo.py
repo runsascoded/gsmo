@@ -483,13 +483,6 @@ def main(*args):
                     ]
 
                 if sudo or dind:
-                    # sudo is already bundled in the dind image
-                    if not dind:
-                        cmds += [
-                            'apt-get update',
-                            'apt-get install -y sudo',
-                        ]
-
                     # user isn't known at build-time though, so pswd-less sudo is patched in here
                     cmds += [ 'perl -pi -e "s/^%%sudo(.*ALL=).*/%s\\1(ALL) NOPASSWD: ALL/" /etc/sudoers' % image_user, ]
 
