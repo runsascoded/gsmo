@@ -581,7 +581,7 @@ def main(*args):
     if run_mode:
         RUN_CONFIG_YML_PATH = '/run_config.yml'
         if run_config:
-            run_config_file = NamedTemporaryFile(dir=gsmo_dir, suffix='.yml', delete=False)
+            run_config_file = NamedTemporaryFile(dir=env.get('GSMO_DIR'), suffix='.yml', delete=False)
             run_config_path = run_config_file.name
             print(f'Writing run config to {run_config_path} (gsmo dir: {gsmo_dir})')
             with open(run_config_path,'w') as f:

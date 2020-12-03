@@ -39,7 +39,6 @@ class Modules:
                     if 'GSMO_IMAGE' in env:
                         cmd += ['-i',env['GSMO_IMAGE']]
                     cmd += ['-I','run','-o',out,'-x',nb,'-Y',tmp.name]
-                    # cmd += ['-I','j']
                     gsmo.main(*cmd)
             else:
                 execute(
