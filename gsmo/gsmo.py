@@ -107,7 +107,9 @@ def main(*args):
 
     container_pips = lists(get('container_pip')) + lists(get('pie'))
     pips = get('pip', [])
-    if isinstance(pips, dict):
+    if isinstance(pips, str):
+        pips = [pips]
+    elif isinstance(pips, dict):
         keys = pips.keys()
         if 'container' in keys: container_pips += pips.pop('container')
         if 'img' in keys:
@@ -424,10 +426,10 @@ def main(*args):
         if pips:
             if use_docker:
                 build_image = True
-                RUN(f'pip install {" ".join(pips)}')
+                RUN('pip install "%s"' % "\" \"".join(pips))
             else:
                 import pip
-                print(f'pip install {" ".join(pips)}')
+                print('pip install "%s"' % "\" \"".join(pips))
                 pip.main(['install'] + pips)
 
         default_kvs = {
