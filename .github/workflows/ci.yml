@@ -9,7 +9,7 @@ jobs:
         with:
           ref: ${{ github.head_ref }}
           submodules: true
-      - name: Fetch example submodule
+      - name: Fetch example submodules
         run: |
           pushd example/factors && git fetch --unshallow origin && popd
           pushd example/dind && git fetch --unshallow origin && popd
