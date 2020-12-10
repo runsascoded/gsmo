@@ -675,9 +675,11 @@ def main(*args):
                 run(*cmd, dry_run=True)
             else:
                 run(*cmd)
+                start = dt.now()
                 sleep_interval = 0.5
                 backoff_idx = 0
                 backoff_cutoff = 5
+                max_sleep_interval = 5
                 while True:
                     sleep(sleep_interval)
                     lns = lines('docker','exec',name,'jupyter','notebook','list')
@@ -704,11 +706,13 @@ def main(*args):
                                 run('docker','attach',name)
                         break
                     else:
-                        print(f'No Jupyter server found in container {name}; sleep {sleep_interval}s…')
+                        print(f'No Jupyter server found in container {name}; sleep {"%.2f" % sleep_interval}s…')
                         backoff_idx += 1
                         if backoff_idx == backoff_cutoff:
                             backoff_idx = 0
                             sleep_interval *= 1.6
+                            if sleep_interval > max_sleep_interval:
+                                raise RuntimeError('Failed to detect Jupyter server after %ds' % int((dt.now() - start).total_seconds()))
         else:
             print(f'running from {cwd}')
             if run_in_existing_container:
