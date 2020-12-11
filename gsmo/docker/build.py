@@ -118,7 +118,7 @@ def build(
         LN()
         RUN('pip install --upgrade --no-cache utz[setup]==0.1.3')
         LN()
-        ENTRYPOINT([ "gsmo-entrypoint", "/src" ])
+        ENTRYPOINT("gsmo-entrypoint", "/src")
 
         if dind:
             RUN(
