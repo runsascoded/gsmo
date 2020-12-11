@@ -304,8 +304,12 @@ def main(*args):
 
     image_user = get('image_user', DEFAULT_USER)
     if image_user == '': image_user = id.user
+
     image_group = get('image_group', DEFAULT_GROUP)
-    if image_group == '': image_group = id.group
+    if image_group is True: image_group = DEFAULT_GROUP
+    elif image_group is False: image_group = None
+    elif image_group == '': image_group = id.group
+
     sudo = get('sudo')
     id_attrs = lists(get('id'))
     if 'u' in id_attrs or 'user' in id_attrs: image_user = id.user
