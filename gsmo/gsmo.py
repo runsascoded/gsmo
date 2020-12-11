@@ -489,6 +489,7 @@ def main(*args):
                         f'chown -R {id.uid}:{id.gid} {IMAGE_HOME}',
                         'chmod go+rx /usr/local/etc/jupyter/nbconfig/ /root /root/.bashrc',
                         'chmod -R go+rx /root/.rc',
+                        'ls -aR /root',
                     ]
 
                 if sudo or dind:
