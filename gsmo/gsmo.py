@@ -444,6 +444,18 @@ def main(*args):
     # based from it; otherwise, use an extant upstream image
     build_image = False
 
+    default_kvs = {
+        'cmd': cmd,
+        'dir': gsmo_dir,
+        'dev_mode': dev_mode,
+        'dst': dst,
+        'image': base_image,
+        'mounts': str(mounts),
+        'path': cwd,
+        'root': gsmo_root,
+        'version': version,
+    }
+
     if not run_in_existing_container:
         dockerfile = join(cwd, 'Dockerfile')
         if exists(dockerfile) and not explict_base_img:
@@ -484,18 +496,6 @@ def main(*args):
                     import pip
                     print('pip install "%s"' % "\" \"".join(pips))
                     pip.main(['install'] + pips)
-
-            default_kvs = {
-                'cmd': cmd,
-                'dir': gsmo_dir,
-                'dev_mode': dev_mode,
-                'dst': dst,
-                'image': base_image,
-                'mounts': str(mounts),
-                'path': cwd,
-                'root': gsmo_root,
-                'version': version,
-            }
 
             ENV({ f'GSMO_{k.upper()}':v for k,v in default_kvs.items()})
 
