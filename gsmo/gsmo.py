@@ -486,7 +486,7 @@ def main(*args):
                         useradd = f'useradd -u {id.uid} -g {id.gid} -s /bin/bash -m -d {IMAGE_HOME} {image_user}'
                     cmds += [
                         useradd,
-                        f'chown -R {id.uid}:{id.gid} {IMAGE_HOME} /root/.rc',
+                        f'chown -R {id.uid}:{id.gid} {IMAGE_HOME} /root',
                         'chmod go+rx /usr/local/etc/jupyter/nbconfig/ /root /root/.bashrc',
                     ]
 
