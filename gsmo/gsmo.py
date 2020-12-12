@@ -633,12 +633,12 @@ def main(*args):
     workdir_args = [ '--workdir', workdir ]
     name_args = [ '--name', name ]
 
-    label_args = [ f'gsmo.{k}={v}' for k,v in default_kvs.items() ]
+    label_args = [ ['-l',f'gsmo.{k}={v}'] for k,v in default_kvs.items() ]
     if labels:
         label_args += [ [ '-l', f'{k}={v}' ] for k,v in labels.items() ]
 
     if labels_file:
-        label_args += [ '--labels-file', labels_file ]
+        label_args += [ '--label-file', labels_file ]
 
     exec_flags = \
         flags + \
