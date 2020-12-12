@@ -386,12 +386,12 @@ def main(*args):
             print('Enforcing `sudo` bit required for sh_entrypoint.sh / docker-for-linux bug workaround')
             sudo = True
         entrypoint = join(gsmo_dir,'sh_entrypoint.sh')
-        args = []
+        entrypoint_args = []
     elif jupyter_mode:
         # Launch `jupyter notebook` server
         entrypoint = 'jupyter'
         assert jupyter_dst_port
-        args = [
+        entrypoint_args = [
             'notebook',
             '--ip','0.0.0.0',
             '--port',jupyter_dst_port,
@@ -399,16 +399,16 @@ def main(*args):
             f'--NotebookApp.notebook_dir={jupyter_dir}',
         ]
         if root:
-            args += [ '--allow-root', ]
+            entrypoint_args += [ '--allow-root', ]
     else:
         assert run_mode
         run_nb = get('run', DEFAULT_RUN_NB)
         entrypoint = 'gsmo-entrypoint'
         if not exists(run_nb):
             raise ValueError(f"Run notebook doesn't exist: {run_nb}")
-        args = [ '--run', run_nb, '--out', out, ]
+        entrypoint_args = [ '--run', run_nb, '--out', out, ]
         if commit:
-            args += [ ['--commit',path] for path in commit]
+            entrypoint_args += [ ['--commit',path] for path in commit]
 
     if dind:
         [gid,grp] = line(
@@ -578,11 +578,11 @@ def main(*args):
             flags += ['--rm']
 
     if container_pips:
-        args = [ len(container_pips) ] + container_pips + [ entrypoint ] + args
+        entrypoint_args = [ len(container_pips) ] + container_pips + [ entrypoint ] + entrypoint_args
         entrypoint = join(gsmo_dir,'pip_entrypoint.sh')
 
     if dind:
-        args = [entrypoint] + args
+        entrypoint_args = [entrypoint] + entrypoint_args
         entrypoint = join(gsmo_dir,'dind_entrypoint.sh')
         groups.append(docker_sock.gid)
 
@@ -595,7 +595,7 @@ def main(*args):
             with open(run_config_path,'w') as f:
                 yaml.safe_dump(dict(run_config), f, sort_keys=False)
             mounts += dind_mnt(run_config_path, RUN_CONFIG_YML_PATH)
-            args += [ '-Y',RUN_CONFIG_YML_PATH ]
+            entrypoint_args += [ '-Y',RUN_CONFIG_YML_PATH ]
         else:
             print('no run config')
     else:
@@ -651,14 +651,14 @@ def main(*args):
             exec_flags + \
             [name] + \
             [entrypoint] + \
-            args
+            entrypoint_args
     else:
         all_args = \
             all_flags + \
             entrypoint_args + \
             name_args + \
             [image] + \
-            args
+            entrypoint_args
 
     if use_docker:
         if jupyter_mode and check('which', 'open'):
