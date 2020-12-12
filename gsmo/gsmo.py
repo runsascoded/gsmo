@@ -421,6 +421,22 @@ def main(*args):
         docker_sock = o(gid=gid,grp=grp)
         print(f'Parsed /var/run/docker.sock group: {grp} ({gid})')
 
+    # Remove any existing container
+    run_in_existing_container = False
+    rm_existing_container = False
+    if use_docker:
+        container = process.json('docker','container','inspect',name, err_ok=True)
+        if container:
+            container = singleton(container, dedupe=False)
+            if container.get('State',{}).get('Running',False):
+                container_labels = container.get('Config').get('Labels',{})
+                if not container_labels.get('gsmo.image',{}):
+                    raise RuntimeError(f"Running container {name} doesn't appear to be a gsmo container (missing gsmo.image label)")
+                print(f'Will execute in existing container {name}')
+                run_in_existing_container = True
+            else:
+                rm_existing_container = True
+
     from utz import docker
     from utz.use import use
 
@@ -428,122 +444,123 @@ def main(*args):
     # based from it; otherwise, use an extant upstream image
     build_image = False
 
-    dockerfile = join(cwd, 'Dockerfile')
-    if exists(dockerfile) and not explict_base_img:
-        build_image = True
-        extend = dockerfile
-    else:
-        extend = None
+    if not run_in_existing_container:
+        dockerfile = join(cwd, 'Dockerfile')
+        if exists(dockerfile) and not explict_base_img:
+            build_image = True
+            extend = dockerfile
+        else:
+            extend = None
 
-    file = docker.File(extend=extend)
-    with use(file), file:
-        if not extend:
-            FROM(base_image)
+        file = docker.File(extend=extend)
+        with use(file), file:
+            if not extend:
+                FROM(base_image)
 
-        if apts:
+            if apts:
+                if use_docker:
+                    build_image = True
+                    RUN(
+                        'apt-get update',
+                        f'apt-get install -y {" ".join(apts)}'
+                    )
+                else:
+                    stderr.write(f'Installing apt deps skipped in docker-less mode: {" ".join(apts)}\n')
+
+            reqs_txt = join(cwd, 'requirements.txt')
+            if exists(reqs_txt) and not skip_requirements_txt:
+                with open(reqs_txt, 'r') as f:
+                    pips += [
+                        f'"{dep}"'
+                        for line in f.readlines()
+                        if (dep := line.rstrip('\n'))
+                    ]
+
+            if pips:
+                if use_docker:
+                    build_image = True
+                    RUN('pip install "%s"' % "\" \"".join(pips))
+                else:
+                    import pip
+                    print('pip install "%s"' % "\" \"".join(pips))
+                    pip.main(['install'] + pips)
+
+            default_kvs = {
+                'cmd': cmd,
+                'dir': gsmo_dir,
+                'dev_mode': dev_mode,
+                'dst': dst,
+                'image': base_image,
+                'mounts': str(mounts),
+                'path': cwd,
+                'root': gsmo_root,
+                'version': version,
+            }
+
+            ENV({ f'GSMO_{k.upper()}':v for k,v in default_kvs.items()})
+
+            if image_envs:
+                build_image = True
+                ENV(image_envs)
+
+            if image_env_file:
+                build_image = True
+                with open(image_env_file,'r') as f:
+                    ENV(*[ l.strip() for l in f.readlines() ])
+
+            LABEL({ f'gsmo.{k}':v for k,v in default_kvs.items()})
+
+            if labels:
+                build_image = True
+                LABEL(**labels)
+
+            if labels_file:
+                build_image = True
+                with open(labels_file,'r') as f:
+                    LABEL(*[ l.strip() for l in f.readlines() ])
+
             if use_docker:
-                build_image = True
-                RUN(
-                    'apt-get update',
-                    f'apt-get install -y {" ".join(apts)}'
-                )
-            else:
-                stderr.write(f'Installing apt deps skipped in docker-less mode: {" ".join(apts)}\n')
+                if image_user or image_group or sudo or dind:
+                    cmds = []
 
-        reqs_txt = join(cwd, 'requirements.txt')
-        if exists(reqs_txt) and not skip_requirements_txt:
-            with open(reqs_txt, 'r') as f:
-                pips += [
-                    f'"{dep}"'
-                    for line in f.readlines()
-                    if (dep := line.rstrip('\n'))
-                ]
+                    if image_group or dind:
+                        assert image_group
+                        cmds += [f'groupadd -f -o -g {id.gid} {image_group}']
 
-        if pips:
-            if use_docker:
-                build_image = True
-                RUN('pip install "%s"' % "\" \"".join(pips))
-            else:
-                import pip
-                print('pip install "%s"' % "\" \"".join(pips))
-                pip.main(['install'] + pips)
+                    if image_user or dind:
+                        assert image_user
+                        if dind:
+                            useradd = f'useradd -u {id.uid} -g {id.gid} -G {docker_sock.gid} -s /bin/bash -m -d {IMAGE_HOME} {image_user}'
+                        else:
+                            useradd = f'useradd -u {id.uid} -g {id.gid} -s /bin/bash -m -d {IMAGE_HOME} {image_user}'
+                        cmds += [useradd,]
 
-        default_kvs = {
-            'cmd': cmd,
-            'dir': gsmo_dir,
-            'dev_mode': dev_mode,
-            'dst': dst,
-            'image': base_image,
-            'mounts': str(mounts),
-            'path': cwd,
-            'root': gsmo_root,
-            'version': version,
-        }
+                    if sudo or dind:
+                        # user isn't known at build-time though, so pswd-less sudo is patched in here
+                        cmds += [ 'perl -pi -e "s/^%%sudo(.*ALL=).*/%s\\1(ALL) NOPASSWD: ALL/" /etc/sudoers' % image_user, ]
 
-        ENV({ f'GSMO_{k.upper()}':v for k,v in default_kvs.items()})
+                    build_image = True
+                    RUN(*cmds)
+                    if image_user:
+                        if image_group:
+                            USER(id.uid, id.gid)
+                        else:
+                            USER(id.uid)
 
-        if image_envs:
-            build_image = True
-            ENV(image_envs)
-
-        if image_env_file:
-            build_image = True
-            with open(image_env_file,'r') as f:
-                ENV(*[ l.strip() for l in f.readlines() ])
-
-        LABEL({ f'gsmo.{k}':v for k,v in default_kvs.items()})
-
-        if labels:
-            build_image = True
-            LABEL(**labels)
-
-        if labels_file:
-            build_image = True
-            with open(labels_file,'r') as f:
-                LABEL(*[ l.strip() for l in f.readlines() ])
-
-        if use_docker:
-            if image_user or image_group or sudo or dind:
-                cmds = []
-
-                if image_group or dind:
-                    assert image_group
-                    cmds += [f'groupadd -f -o -g {id.gid} {image_group}']
-
-                if image_user or dind:
-                    assert image_user
-                    if dind:
-                        useradd = f'useradd -u {id.uid} -g {id.gid} -G {docker_sock.gid} -s /bin/bash -m -d {IMAGE_HOME} {image_user}'
-                    else:
-                        useradd = f'useradd -u {id.uid} -g {id.gid} -s /bin/bash -m -d {IMAGE_HOME} {image_user}'
-                    cmds += [useradd,]
-
-                if sudo or dind:
-                    # user isn't known at build-time though, so pswd-less sudo is patched in here
-                    cmds += [ 'perl -pi -e "s/^%%sudo(.*ALL=).*/%s\\1(ALL) NOPASSWD: ALL/" /etc/sudoers' % image_user, ]
-
-                build_image = True
-                RUN(*cmds)
-                if image_user:
-                    if image_group:
-                        USER(id.uid, id.gid)
-                    else:
-                        USER(id.uid)
-
-        if build_image:
-            assert use_docker
-            if dry_run == 2:
-                print('Exiting before building Docker image:')
-                file.close(closed_ok=True)
-                with open(file.path,'r') as f:
-                    print(f.read())
-                exit(0)
-            else:
-                file.build(name, closed_ok=True)
-                image = name
-                if tags:
-                    for tag in tags:
-                        run('docker','tag',name,f'{name}:{tag}')
+            if build_image:
+                assert use_docker
+                if dry_run == 2:
+                    print('Exiting before building Docker image:')
+                    file.close(closed_ok=True)
+                    with open(file.path,'r') as f:
+                        print(f.read())
+                    exit(0)
+                else:
+                    file.build(name, closed_ok=True)
+                    image = name
+                    if tags:
+                        for tag in tags:
+                            run('docker','tag',name,f'{name}:{tag}')
 
     # Determine user to run as (inside Docker container)
     user_args = []
@@ -556,16 +573,8 @@ def main(*args):
             user_args = [ '-u', f'{uid}:{gid}' ]
 
     # Remove any existing container
-    run_in_existing_container = False
-    if use_docker:
-        container = process.json('docker','container','inspect',name, err_ok=True)
-        if container:
-            container = singleton(container, dedupe=False)
-            if container.get('State',{}).get('Running',False):
-                print(f'Will execute in existing container {name}')
-                run_in_existing_container = True
-            else:
-                run('docker','container','rm',name)
+    if rm_existing_container:
+        run('docker','container','rm',name)
 
     interactive = not args.no_interactive
     if interactive:
