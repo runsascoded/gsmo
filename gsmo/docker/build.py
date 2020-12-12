@@ -101,10 +101,10 @@ def build(
             './_rc -b server runsascoded/.rc',
         )
         COPY('usr/local/etc/jupyter/nbconfig/notebook.json','/usr/local/etc/jupyter/nbconfig/')
-        # RUN(
-        #     'chmod go+rx /usr/local/etc/jupyter/nbconfig/ /root /root/.bashrc',
-        #     'chmod -R go+rx /root/.rc',
-        # )
+        RUN(
+            'chmod go+rx /usr/local/etc/jupyter/nbconfig/ /root /root/.bashrc',
+            'chmod -R go+rx /root/.rc',
+        )
         LN()
 
         WORKDIR(); LN()

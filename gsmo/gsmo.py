@@ -484,11 +484,7 @@ def main(*args):
                         useradd = f'useradd -u {id.uid} -g {id.gid} -G {docker_sock.gid} -s /bin/bash -m -d {IMAGE_HOME} {image_user}'
                     else:
                         useradd = f'useradd -u {id.uid} -g {id.gid} -s /bin/bash -m -d {IMAGE_HOME} {image_user}'
-                    cmds += [
-                        useradd,
-                        f'chown -R {id.uid}:{id.gid} {IMAGE_HOME} /root',
-                        'chmod go+rx /usr/local/etc/jupyter/nbconfig/ /root /root/.bashrc',
-                    ]
+                    cmds += [useradd,]
 
                 if sudo or dind:
                     # user isn't known at build-time though, so pswd-less sudo is patched in here
@@ -553,7 +549,7 @@ def main(*args):
 
     if shell_mode:
         # Launch Bash shell
-        entrypoint = '/bin/bash'
+        entrypoint = join(gsmo_dir,'sh_entrypoint.sh')
         args = []
     elif jupyter_mode:
         # Launch `jupyter notebook` server
