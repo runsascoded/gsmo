@@ -316,6 +316,8 @@ def main(*args):
     if 'g' in id_attrs or 'group' in id_attrs: image_group = id.group
     if 'r' in id_attrs or 'root' in id_attrs: root = True
     if 's' in id_attrs or 'sudo' in id_attrs: sudo = True
+    if 'R' in id_attrs: root = False
+    if 'S' in id_attrs: sudo = False
 
     if container_pips:
         sudo = True
@@ -377,6 +379,36 @@ def main(*args):
             ports = [ f'{jupyter_src_port}:{jupyter_dst_port}', ]
         else:
             ports = []
+
+    if shell_mode:
+        # Launch Bash shell
+        if not sudo:
+            print('Enforcing `sudo` bit required for sh_entrypoint.sh / docker-for-linux bug workaround')
+            sudo = True
+        entrypoint = join(gsmo_dir,'sh_entrypoint.sh')
+        args = []
+    elif jupyter_mode:
+        # Launch `jupyter notebook` server
+        entrypoint = 'jupyter'
+        assert jupyter_dst_port
+        args = [
+            'notebook',
+            '--ip','0.0.0.0',
+            '--port',jupyter_dst_port,
+            '--ContentsManager.allow_hidden=True',
+            f'--NotebookApp.notebook_dir={jupyter_dir}',
+        ]
+        if root:
+            args += [ '--allow-root', ]
+    else:
+        assert run_mode
+        run_nb = get('run', DEFAULT_RUN_NB)
+        entrypoint = 'gsmo-entrypoint'
+        if not exists(run_nb):
+            raise ValueError(f"Run notebook doesn't exist: {run_nb}")
+        args = [ '--run', run_nb, '--out', out, ]
+        if commit:
+            args += [ ['--commit',path] for path in commit]
 
     if dind:
         [gid,grp] = line(
@@ -544,33 +576,6 @@ def main(*args):
         assert use_docker
         if not run_in_existing_container:
             flags += ['--rm']
-
-    run_nb = get('run', DEFAULT_RUN_NB)
-
-    if shell_mode:
-        # Launch Bash shell
-        entrypoint = join(gsmo_dir,'sh_entrypoint.sh')
-        args = []
-    elif jupyter_mode:
-        # Launch `jupyter notebook` server
-        entrypoint = 'jupyter'
-        assert jupyter_dst_port
-        args = [
-            'notebook',
-            '--ip','0.0.0.0',
-            '--port',jupyter_dst_port,
-            '--ContentsManager.allow_hidden=True',
-            f'--NotebookApp.notebook_dir={jupyter_dir}',
-        ]
-        if root:
-            args += [ '--allow-root', ]
-    else:
-        entrypoint = 'gsmo-entrypoint'
-        if not exists(run_nb):
-            raise ValueError(f"Run notebook doesn't exist: {run_nb}")
-        args = [ '--run', run_nb, '--out', out, ]
-        if commit:
-            args += [ ['--commit',path] for path in commit]
 
     if container_pips:
         args = [ len(container_pips) ] + container_pips + [ entrypoint ] + args

@@ -4,6 +4,6 @@
 set -ex
 
 # Work-around for https://github.com/docker/for-linux/issues/433#issuecomment-743780143
-ls -la /root &>/dev/null
+sudo ls -la /root &>/dev/null
 
 /bin/bash
