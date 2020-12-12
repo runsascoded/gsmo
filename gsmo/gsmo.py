@@ -633,19 +633,19 @@ def main(*args):
     workdir_args = [ '--workdir', workdir ]
     name_args = [ '--name', name ]
 
+    label_args = [ f'gsmo.{k}={v}' for k,v in default_kvs.items() ]
+    if labels:
+        label_args += [ [ '-l', f'{k}={v}' ] for k,v in labels.items() ]
+
+    if labels_file:
+        label_args += [ '--labels-file', labels_file ]
+
     exec_flags = \
         flags + \
         env_args + \
         workdir_args
 
     print(f'mounts: {mounts}')
-    all_flags = \
-        exec_flags + \
-        mounts.args() + \
-        port_args + \
-        user_args + \
-        group_args
-
     if run_in_existing_container:
         all_args = \
             exec_flags + \
@@ -653,6 +653,14 @@ def main(*args):
             [entrypoint] + \
             cmd_args
     else:
+        all_flags = \
+            exec_flags + \
+            mounts.args() + \
+            port_args + \
+            user_args + \
+            label_args + \
+            group_args
+
         all_args = \
             all_flags + \
             entrypoint_args + \
