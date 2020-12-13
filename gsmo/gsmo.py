@@ -57,7 +57,7 @@ def main(*args):
     jupyter_parser = subparsers.add_parser('jupyter', help='Boot (and attempt to open in browser) a Jupyter server running in a Docker image built for this module', aliases=['j'])
     jupyter_parser.set_defaults(cmd='jupyter')
 
-    run_parser = subparsers.add_parser('run', help='Run this module in a purpose-built Docker image', aliases=['r'])
+    run_parser = subparsers.add_parser('run', help='Run this module in a purpose-built Docker image', aliases=['r','nb'])
     run_parser.set_defaults(cmd='run')
 
     shell_parser = subparsers.add_parser('shell', help='Boot a Bash shell in a Docker image built for this module', aliases=['sh','s','bash'])
