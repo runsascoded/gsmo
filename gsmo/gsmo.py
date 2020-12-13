@@ -539,6 +539,10 @@ def main(*args):
                         # user isn't known at build-time though, so pswd-less sudo is patched in here
                         cmds += [ 'perl -pi -e "s/^%%sudo(.*ALL=).*/%s\\1(ALL) NOPASSWD: ALL/" /etc/sudoers' % image_user, ]
 
+                    cmds += [
+                        f'chown -R {id.uid}:{id.gid} {IMAGE_HOME}'
+                    ]
+
                     build_image = True
                     RUN(*cmds)
                     if image_user:
