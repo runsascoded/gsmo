@@ -497,7 +497,7 @@ def main(*args):
                     print('pip install "%s"' % "\" \"".join(pips))
                     pip.main(['install'] + pips)
 
-            ENV({ f'GSMO_{k.upper()}':v for k,v in default_kvs.items()})
+            ENV('GSMO=1', { f'GSMO_{k.upper()}':v for k,v in default_kvs.items()})
 
             if image_envs:
                 build_image = True
@@ -508,7 +508,7 @@ def main(*args):
                 with open(image_env_file,'r') as f:
                     ENV(*[ l.strip() for l in f.readlines() ])
 
-            LABEL({ f'gsmo.{k}':v for k,v in default_kvs.items()})
+            LABEL('gsmo', { f'gsmo.{k}':v for k,v in default_kvs.items()})
 
             if labels:
                 build_image = True
@@ -642,7 +642,7 @@ def main(*args):
     workdir_args = [ '--workdir', workdir ]
     name_args = [ '--name', name ]
 
-    label_args = [ ['-l',f'gsmo.{k}={v}'] for k,v in default_kvs.items() ]
+    label_args = ['-l','gsmo'] + [ ['-l',f'gsmo.{k}={v}'] for k,v in default_kvs.items() ]
     if labels:
         label_args += [ [ '-l', f'{k}={v}' ] for k,v in labels.items() ]
 
