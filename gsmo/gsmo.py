@@ -255,6 +255,8 @@ def main(*args):
     mounts = Mounts([ dind_mnt(m.src, m.dst) for m in mounts.mounts ])
     mounts += dind_mnt(src, dst)
 
+    mounts += [ dind_mnt(pip, pip) for pip in container_pips ]
+
     dind = get('dind')
     if dind:
         default_image = DEFAULT_DIND_IMAGE
