@@ -303,7 +303,9 @@ def main(*args):
     id = UnixId()
 
     image_user = get('image_user', DEFAULT_USER)
-    if image_user == '': image_user = id.user
+    if image_user is True: image_user = DEFAULT_USER
+    elif image_user is False: image_user = None
+    elif image_user == '': image_user = id.user
 
     image_group = get('image_group', DEFAULT_GROUP)
     if image_group is True: image_group = DEFAULT_GROUP
