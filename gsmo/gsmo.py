@@ -288,7 +288,7 @@ def main(*args):
         gsmo_mount = dind_mnt(gsmo_dev_dir, gsmo_dir)
         print(f'Adding gsmo mount and container editable-pip: {gsmo_mount}')
         mounts += gsmo_mount
-        container_pips += [gsmo_dir]
+        container_pips = [gsmo_dir] + container_pips
 
     use_docker = get('docker', True)
     rm = get('remove_container')
