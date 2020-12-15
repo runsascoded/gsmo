@@ -8,13 +8,13 @@ from .cli import run_args, load_run_config
 from .config import Config, DEFAULT_RUN_NB, DEFAULT_NB_DIR
 from .papermill import execute
 
-def main():
+def main(args=None):
     parser = ArgumentParser()
     parser.add_argument('--progress',action='store_true',help="When set, have papermill show progress bars")
     for arg in run_args:
         parser.add_argument(*arg.args, **arg.kwargs)
 
-    args = parser.parse_args()
+    args = parser.parse_args(args=args)
 
     config = Config(args)
     get = partial(Config.get, config)

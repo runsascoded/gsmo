@@ -705,14 +705,7 @@ def main(*args):
             if dry_run:
                 run(*cmd, dry_run=True)
             else:
-                run(*cmd)
-                start = dt.now()
-                sleep_interval = 0.5
-                backoff_idx = 0
-                backoff_cutoff = 5
-                max_sleep_interval = 5
-                while True:
-                    sleep(sleep_interval)
+                def get_jupyter_link():
                     lns = lines('docker','exec',name,'jupyter','notebook','list')
                     if lns[0] != 'Currently running servers:':
                         raise Exception('Unexpected `jupyter notebook list` output:\n\t%s' % "\n\t".join(lns))
@@ -725,25 +718,23 @@ def main(*args):
                             raise RuntimeError(f'Jupyter running on unexpected port {m["port"]} (!= {jupyter_dst_port})')
                         token = m['token']
                         url = f'http://127.0.0.1:{jupyter_src_port}?token={token}'
-                        if jupyter_open:
-                            try:
-                                run('open',url)
-                            except CalledProcessError:
-                                stderr.write('Failed to open %s\n' % url)
-                        if shell:
-                            run('docker','exec','-it',name,'/usr/bin/env','bash')
-                        else:
-                            if not detach:
-                                run('docker','attach',name)
-                        break
+                        return url
                     else:
-                        print(f'No Jupyter server found in container {name}; sleep {"%.2f" % sleep_interval}s…')
-                        backoff_idx += 1
-                        if backoff_idx == backoff_cutoff:
-                            backoff_idx = 0
-                            sleep_interval *= 1.6
-                            if sleep_interval > max_sleep_interval:
-                                raise RuntimeError('Failed to detect Jupyter server after %ds' % int((dt.now() - start).total_seconds()))
+                        return None
+
+                run(*cmd)
+                from utz.backoff import backoff
+                url = backoff(get_jupyter_link, step=1.6)
+                if jupyter_open:
+                    try:
+                        run('open',url)
+                    except CalledProcessError:
+                        stderr.write('Failed to open %s\n' % url)
+                if shell:
+                    run('docker','exec','-it',name,'/usr/bin/env','bash')
+                else:
+                    if not detach:
+                        run('docker','attach',name)
         else:
             print(f'running from {cwd}')
             if run_in_existing_container:

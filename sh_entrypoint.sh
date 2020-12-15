@@ -3,7 +3,7 @@
 
 set -ex
 
-# Work-around for https://github.com/docker/for-linux/issues/433#issuecomment-743780143
+# Work-around for https://github.com/docker/for-linux/issues/433#issuecomment-743780143; TODO: apply only in relevant docker-for-linux builds
 sudo ls -la /root &>/dev/null
 
 /bin/bash
