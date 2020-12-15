@@ -707,10 +707,11 @@ def main(*args):
             else:
                 def get_jupyter_link():
                     lns = lines('docker','exec',name,'jupyter','notebook','list')
-                    if lns[0] != 'Currently running servers:':
+                    [ first, *rest ] = lns
+                    if first != 'Currently running servers:':
                         raise Exception('Unexpected `jupyter notebook list` output:\n\t%s' % "\n\t".join(lns))
-                    if len(lns) == 2:
-                        ln = lns[1]
+                    ln = singleton(rest, empty_ok=True)
+                    if ln:
                         rgx = f'(?P<url>http://0\\.0\\.0\\.0:(?P<port>\\d+)/\\?token=(?P<token>[0-9a-f]+)) :: {jupyter_dir}'
                         if not (m := match(rgx, ln)):
                             raise RuntimeError(f'Unrecognized notebook server line: {ln}')
@@ -724,7 +725,7 @@ def main(*args):
 
                 run(*cmd)
                 from utz.backoff import backoff
-                url = backoff(get_jupyter_link, step=1.6)
+                url = backoff(get_jupyter_link, init=.5, step=1.6, max=5)
                 if jupyter_open:
                     try:
                         run('open',url)
