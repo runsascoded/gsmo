@@ -142,8 +142,10 @@ def test_push():
     cwd = getcwd()
     working_branch = 'gsmo-test'
     sha = 'e0add3d'
+    gsmo_dir = dirname(dirname(gsmo.__file__))
+    hailstone_dir = join(gsmo_dir, 'example/hailstone')
     with git.clone.tmp(
-        'example/hailstone',
+        hailstone_dir,
         branch=working_branch,
         init=sha,
     ) as tmpdir:

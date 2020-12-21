@@ -33,6 +33,8 @@ def main(*args):
         Arg('--container-env-file','--Ef',action='append',help='Files containing environment variables to pass to Docker container (at run time)'),
         Arg('-i','--image',help=f'Base docker image to build on (default: f{DEFAULT_IMAGE})'),
         Arg('--id',help='Comma-delimited subset of {user,group,root,sudo} (or {u,g,r,s}); short-hand for --image-user, --image-group, --root, and --sudo, resp.'),
+        Arg('--force-local',default=None,action='store_true',help="Interpret <input> as a local directory"),
+        Arg('--force-remote',default=None,action='store_true',help="Interpret <input> as a remote Git repo URL"),
         Arg('-I','--no-interactive',default=None,action='store_true',help="Don't run interactively / allocate a TTY (i.e. skip `-it` flags to `docker run`)"),
         Arg('-g','--image-group',help='Create a group with this name inside the Docker image (with same GID as the current host-machine group; empty string implies using the current host-machine group name)'),
         Arg('-G','--group',action='append',help="Additional groups to add docker image user to"),
@@ -97,8 +99,11 @@ def main(*args):
             chdir(dir)
 
     input = args.input
+    force_local = args.force_local
+    force_remote = args.force_remote
     url = urlparse(input)
-    if url.scheme in ['http','https','git','ssh',]:
+    GIT_SSH_URL_REGEX = '(?:(?P<user>[^@:]+)@)?(?P<domain>[^:]+):(?P<path>[A-Za-z0-9/:_\-]+)'
+    if ((url.scheme in ['http','https','git','ssh',]) or (match(GIT_SSH_URL_REGEX, input) or force_remote)) and not force_local:
         dir_ctx = git.clone.tmp(input, push=True)
     elif input:
         if run_mode and args.clone:
