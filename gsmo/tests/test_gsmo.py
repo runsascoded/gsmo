@@ -1,5 +1,7 @@
 from gsmo import gsmo
-from utz import *
+
+import utz
+from utz import cd, contextmanager, dirname, env, exists, getcwd, git, join, lines, Repo, run, TemporaryDirectory
 
 
 @contextmanager
@@ -15,7 +17,7 @@ def example(name, ref=None):
             yield
 
 
-def run_gsmo(*args, dind=False, dst=None):
+def run_gsmo(*args, dind=False):
     tag = env.get('GSMO_IMAGE_TAG')
     if tag:
         if dind:
@@ -28,8 +30,6 @@ def run_gsmo(*args, dind=False, dst=None):
         else:
             img_tag = ':'
     flags = ['-I','-i',img_tag]
-    if dst:
-        flags += ['--dst',dst]
     gsmo.main(*flags,'run',*args)
 
 
@@ -137,3 +137,62 @@ def test_submodules():
         sm_commit = get_submodule_commit('sort')
         lines = sm_commit.tree['out/ints.txt'].data_stream.read().decode().split('\n')
         assert [ int(l) for l in lines if l ] == [ 4, 6, 11, 13, 34, 48, 52, 68, 98, ]
+
+def test_push():
+    cwd = getcwd()
+    working_branch = 'gsmo-test'
+    sha = 'e0add3d'
+    with git.clone.tmp(
+        'example/hailstone',
+        branch=working_branch,
+        init=sha,
+    ) as tmpdir:
+        # Use this temporary clone of the example/hailstone module as a place to demonstrate different methods of
+        # upstreaming changes. `gsmo` runs below will create an additional temporary clone of this one as working space,
+        # and merge changes back upstream either by:
+        #
+        # - pulling from the upstream (preferred)
+        #   - automatically incorporates `git merge` logic in the case of concurrent changes
+        #   - leaves references accessible in the case of merge failure)
+        # - pushing from the working clone
+        #   - updates branch pointers but leaves upstream worktree unchanged
+        #   - can result in leftover diffs equivalent to a `git revert` of what was merged in from the working clone (if
+        #     the branch pushed back upstream is the same branch currently checked out in the upstream clone)
+        branch = git.branch.current()
+        assert working_branch == branch
+        commit0 = git.sha(branch)
+        assert commit0 == sha
+        assert not exists('value')
+
+        flags = ['-I','-i',':',]
+        if True:
+            utz_dir = dirname(dirname(utz.__file__))
+            flags += ['--pie',utz_dir]
+
+        # run gsmo (remotely / from different local directory)
+        with cd(cwd):
+            gsmo.main(*flags,tmpdir,'run','--clone')
+
+        assert lines('git','show',f'{branch}:value') == ['3']
+        assert git.branch.current() == branch
+
+        commit1 = git.sha('HEAD')
+        assert commit1 == git.sha(branch)
+
+        assert git.sha(f'{branch}^') == commit0
+        assert not lines('git','status','--short')
+
+        # run again
+        with cd(cwd):
+            gsmo.main(*flags,tmpdir,'run','--clone')
+
+        assert lines('git','show',f'{branch}:value') == ['10']
+        assert git.branch.current() == branch
+
+        commit2 = git.sha('HEAD')
+        assert commit2 == git.sha(branch)
+
+        assert git.sha(f'{branch}^') == commit1
+        assert git.sha(f'{branch}~2') == commit0
+        status = lines('git','status','--short')
+        assert not status

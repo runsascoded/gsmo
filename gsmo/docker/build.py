@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 
 from utz import *
+from utz.docker.dsl import *
 
 from ..config import GH_REPO, GSMO_DIR, IMAGE_HOME
 
@@ -48,11 +49,8 @@ def build(
 
     base_repo = build_repo()
 
-    from utz import docker
-    from utz.use import use
-
     file = docker.File(copy_dir=docker_dir)
-    with use(file):
+    with file:
         NOTE('Base Dockerfile for Python projects; recent Git, pandas/jupyter/sqlalchemy, and dotfiles for working in-container')
         FROM('python',f'{python_version}-slim')
         LN()
@@ -116,7 +114,7 @@ def build(
         NOTE('Simple .bashrc for anonymous users that just sources /root/.bashrc')
         COPY('home/.bashrc',f'{IMAGE_HOME}/.bashrc')
         LN()
-        RUN('pip install --upgrade --no-cache utz[setup]==0.2.3')
+        RUN('pip install --upgrade --no-cache utz[setup]==0.3.0')
         LN()
         ENTRYPOINT("gsmo-entrypoint", "/src")
 

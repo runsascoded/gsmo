@@ -1,6 +1,7 @@
 from gsmo import control
 from .modules import Modules
 from .papermill import execute
+from . import gsmo
 
 def OK(msg, throw=True):
     exc = control.OK(msg)
