@@ -114,7 +114,7 @@ def build(
         NOTE('Simple .bashrc for anonymous users that just sources /root/.bashrc')
         COPY('home/.bashrc',f'{IMAGE_HOME}/.bashrc')
         LN()
-        RUN('pip install --upgrade --no-cache utz[setup]==0.3.4')
+        RUN('pip install --upgrade --no-cache utz[setup]==0.3.6')
         LN()
         ENTRYPOINT("gsmo-entrypoint", "/src")
 
