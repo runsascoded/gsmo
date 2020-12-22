@@ -39,6 +39,10 @@ jobs:
         run: |
           git config --global user.name CI
           git config --global user.email ci@ci.ci
+          mkdir ~/.ssh
+          echo "${{ secrets.GITLAB_HAILSTONE_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan -t rsa gitlab.com >> ~/.ssh/known_hosts
           pytest -vs
       - name: "Docker: push"
         run: |
