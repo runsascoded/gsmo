@@ -1,7 +1,7 @@
 from gsmo import gsmo
 
 import utz
-from utz import cd, contextmanager, dirname, env, exists, getcwd, git, join, lines, Repo, run, TemporaryDirectory
+from utz import b62, cd, contextmanager, dirname, env, exists, getcwd, git, join, lines, now, Repo, run, TemporaryDirectory
 
 
 @contextmanager
@@ -138,7 +138,8 @@ def test_submodules():
         lines = sm_commit.tree['out/ints.txt'].data_stream.read().decode().split('\n')
         assert [ int(l) for l in lines if l ] == [ 4, 6, 11, 13, 34, 48, 52, 68, 98, ]
 
-def test_push():
+
+def test_clone_local():
     cwd = getcwd()
     working_branch = 'gsmo-test'
     sha = 'e0add3d'
@@ -149,39 +150,29 @@ def test_push():
         branch=working_branch,
         init=sha,
     ) as tmpdir:
-        # Use this temporary clone of the example/hailstone module as a place to demonstrate different methods of
-        # upstreaming changes. `gsmo` runs below will create an additional temporary clone of this one as working space,
-        # and merge changes back upstream either by:
-        #
-        # - pulling from the upstream (preferred)
-        #   - automatically incorporates `git merge` logic in the case of concurrent changes
-        #   - leaves references accessible in the case of merge failure)
-        # - pushing from the working clone
-        #   - updates branch pointers but leaves upstream worktree unchanged
-        #   - can result in leftover diffs equivalent to a `git revert` of what was merged in from the working clone (if
-        #     the branch pushed back upstream is the same branch currently checked out in the upstream clone)
+        # Use this temporary clone of the example/hailstone module as a "base" from which to demonstrate running `gsmo`
+        # in further temporary Git clone directories and upstreaming changes back to the "base" directory.
+
         branch = git.branch.current()
         assert working_branch == branch
-        commit0 = git.sha(branch)
-        assert commit0 == sha
+        sha0 = git.sha(branch)
+        assert sha0 == sha
         assert not exists('value')
 
         flags = ['-I','-i',':',]
-        if True:
-            utz_dir = dirname(dirname(utz.__file__))
-            flags += ['--pie',utz_dir]
 
-        # run gsmo (remotely / from different local directory)
+        # move back to gsmo dir, and run hailstone "remotely" (against a different directory on the same host, namely
+        # the tmpdir created above)
         with cd(cwd):
             gsmo.main(*flags,tmpdir,'run','--clone')
 
         assert lines('git','show',f'{branch}:value') == ['3']
         assert git.branch.current() == branch
 
-        commit1 = git.sha('HEAD')
-        assert commit1 == git.sha(branch)
+        sha1 = git.sha('HEAD')
+        assert sha1 == git.sha(branch)
 
-        assert git.sha(f'{branch}^') == commit0
+        assert git.sha(f'{branch}^') == sha0
         assert not lines('git','status','--short')
 
         # run again
@@ -191,10 +182,44 @@ def test_push():
         assert lines('git','show',f'{branch}:value') == ['10']
         assert git.branch.current() == branch
 
-        commit2 = git.sha('HEAD')
-        assert commit2 == git.sha(branch)
+        sha2 = git.sha('HEAD')
+        assert sha2 == git.sha(branch)
 
-        assert git.sha(f'{branch}^') == commit1
-        assert git.sha(f'{branch}~2') == commit0
+        assert git.sha(f'{branch}^') == sha1
+        assert git.sha(f'{branch}~2') == sha0
         status = lines('git','status','--short')
         assert not status
+
+
+def test_clone_remote():
+    # set this HAILSTONE_SSH_URL to a different fork or repo if developing without access to this one
+    url = env.get('HAILSTONE_SSH_URL', 'git@gitlab.com:gsmo/examples/hailstone.git')
+    branch = f'gsmo-test-{b62(now().ms)}'
+    sha0 = 'e0add3d'
+    sha0_full = 'e0add3d2805fc8999dab650697a22f1939fd5396'
+    with git.clone.tmp(
+        url,
+        branch=branch,
+        init=sha0,
+    ):
+        run('git','push',url,branch)
+        try:
+            remote_branch_sha = git.ls_remote(url, head=branch, sha=sha0)
+            assert remote_branch_sha == sha0_full
+            flags = ['-I','-i',':']
+
+            gsmo.main(*flags,url,'run','-b',branch)
+            run('git','fetch','origin',branch)
+            sha1 = git.sha(f'origin/{branch}')
+            assert git.sha(f'origin/{branch}^') == sha0
+            assert Repo().commit(sha1).tree['value'].data_stream.read().decode().strip() == '3'
+
+            # run again, with `branch` embedded in the URL
+            gsmo.main(*flags,f'{url}@{branch}','run')
+            run('git','fetch','origin',branch)
+            sha2 = git.sha(f'origin/{branch}')
+            assert git.sha(f'origin/{branch}^') == sha1
+            assert Repo().commit(sha2).tree['value'].data_stream.read().decode().strip() == '10'
+        finally:
+            run('git','push','--delete',url,branch)
+

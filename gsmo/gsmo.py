@@ -101,13 +101,30 @@ def main(*args):
     input = args.input
     force_local = args.force_local
     force_remote = args.force_remote
-    url = urlparse(input)
-    GIT_SSH_URL_REGEX = '(?:(?P<user>[^@:]+)@)?(?P<domain>[^:]+):(?P<path>[A-Za-z0-9/:_\-]+)'
-    if ((url.scheme in ['http','https','git','ssh',]) or (match(GIT_SSH_URL_REGEX, input) or force_remote)) and not force_local:
-        dir_ctx = git.clone.tmp(input, push=True)
+    assert not (force_local and force_remote)
+    branch = args.branch
+    clone = args.clone
+    def w(name, ch=r'\w'):
+        return f'(?P<{name}>{ch}+)'
+    user_rgx = w("user")
+    domain_rgx = w("domain", r"[A-Za-z0-9\-\.]")
+    #url_chars = r"[A–Za–z0–9\-\._~!$&'()*+,;=:@]"
+    path_chars = r"[A-Za-z0-9\-\./]"
+    path_rgx = w("path", path_chars)
+    branch_rgx = w("branch", r"[\w\-]")
+    port_rgx = w('port',r'\d')
+    GIT_SSH_URL_REGEX = '(?:ssh://)?(?:%s@)?%s:%s(?:@%s)?' % (user_rgx, domain_rgx, path_rgx, branch_rgx)
+    GIT_HTTP_URL_REGEX = '(?:https?://)?%s(?::%s)?:%s(?:@%s)?' % (domain_rgx, port_rgx, path_rgx, branch_rgx)
+    if (force_remote or (m := match(GIT_SSH_URL_REGEX, input)) or (m := match(GIT_HTTP_URL_REGEX, input))) and not force_local:
+        url_branch = m['branch'] if m else None
+        if branch is None and url_branch:
+            branch = url_branch
+            print(f'Parsing branch {branch} from url {input}')
+            input = input[:-len(f'@{branch}')]
+        dir_ctx = git.clone.tmp(input, branch=branch, push=True)
     elif input:
-        if run_mode and args.clone:
-            dir_ctx = git.clone.tmp(input, pull=True)
+        if run_mode and (clone or branch):
+            dir_ctx = git.clone.tmp(input, branch=branch, pull=True)
         else:
             dir_ctx = cd(input)
     else:

@@ -9,6 +9,7 @@ class Arg:
 
 
 run_args = [
+    Arg('-b','--branch',help="Branch to clone, work in, and push results back to. Can also be passed as a trailing '@<branch>' slug on directory path or remote Git repo URL. For local repositories, implies --clone"),
     Arg('--clone',action='store_true',help='Clone local directory into a temporary dir for duration of the run'),
     Arg('--commit',action='append',help='Paths to `git add` and commit after running'),
     Arg('-C','--dir',help="Resolve paths (incl. mounts) relative to this directory (default: current directory)"),
