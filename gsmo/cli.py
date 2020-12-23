@@ -14,7 +14,7 @@ run_args = [
     Arg('--commit',action='append',help='Paths to `git add` and commit after running'),
     Arg('-C','--dir',help="Resolve paths (incl. mounts) relative to this directory (default: current directory)"),
     Arg('-o','--out',help='Path or directory to write output notebook to (relative to `--dir` directory; default: "nbs")'),
-    Arg('--push',help='Push to this remote spec when done running'),
+    Arg('--push',action='append',help='Push to this remote spec when done running'),
     Arg('-x','--run','--execute',help='Notebook to run (default: run.ipynb)'),
     Arg('-y','--yaml',action='append',help='YAML string(s) with configuration settings for the module being run'),
     Arg('-Y','--yaml-path',action='append',help='YAML file(s) with configuration settings for the module being run'),  # TODO: update example nb

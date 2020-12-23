@@ -223,3 +223,29 @@ def test_clone_remote():
         finally:
             run('git','push','--delete',url,branch)
 
+
+def test_post_run_push():
+    cwd = getcwd()
+    branch = 'gsmo-test'
+    sha0 = 'e0add3d'
+    gsmo_dir = dirname(dirname(gsmo.__file__))
+    hailstone_dir = join(gsmo_dir, 'example/hailstone')
+    with git.clone.tmp(
+        hailstone_dir,
+        '--bare',
+        branch=branch,
+        init=sha0,
+    ) as origin:
+        #run('git','config','receive.denyCurrentBranch','ignore')  # let this repository
+        with git.clone.tmp(origin, branch=branch) as wd:
+            flags = ['-I','-i',':']
+            gsmo.main(*flags,'run','--push','origin')
+            sha1 = git.sha()
+            assert git.sha(f'origin/{branch}') == sha1
+            assert lines('cat','value') == ['3']
+            with cd(origin):
+                assert git.sha(branch) == sha1
+                assert git.sha(f'{branch}^') == sha0
+                assert not exists('value')
+                assert lines('git','status','--short') == ['']
+
