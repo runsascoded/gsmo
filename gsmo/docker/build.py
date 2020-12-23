@@ -5,7 +5,9 @@ from utz.docker.dsl import *
 
 from ..config import GH_REPO, GSMO_DIR, IMAGE_HOME
 
-VERSION_TAG_RGX = r'^v(?P<version>\d+\.\d+\.\d+)$'
+from utz.setup import Compute
+VERSION_TAG_REGEX = Compute.VERSION_TAG_REGEX
+
 
 def build(
     repository: str,
@@ -173,7 +175,7 @@ def build(
                 tag(sha)
                 tag(sha, python_version)
                 for t in lines('git','tag','--points-at','HEAD'):
-                    if (m := match(VERSION_TAG_RGX, t)):
+                    if (m := match(VERSION_TAG_REGEX, t)):
                         t = m['version']
                     tag(t)
                     tag(t, python_version)
