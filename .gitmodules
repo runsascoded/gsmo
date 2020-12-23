@@ -1,6 +1,6 @@
 [submodule "test/hailstone"]
 	path = example/hailstone
-	url = https://github.com/ryan-williams/hailstone_module.git
+	url = https://gitlab.com/gsmo/examples/hailstone.git
 [submodule "example/factors"]
 	path = example/factors
 	url = https://gitlab.com/gsmo/examples/factors.git
