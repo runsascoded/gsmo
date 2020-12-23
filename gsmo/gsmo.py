@@ -9,7 +9,6 @@ from .err import OK, RAISE, WARN
 from .mount import Mount, Mounts
 
 def main(*args):
-    print(f'gsmo.main({args})')
     parser = ArgumentParser()
     parser.add_argument('input',nargs='?',help='Input directory containing run.ipynb (and optionally gsmo.yml, or other path specified by "-y"); defaults to current directory')
 
@@ -79,6 +78,8 @@ def main(*args):
         args = parser.parse_args(args)
     else:
         args = parser.parse_args()
+
+    print(f'gsmo.main({args})')
 
     jupyter_mode = shell_mode = run_mode = False
     cmd = getattr(args, 'cmd', None)
