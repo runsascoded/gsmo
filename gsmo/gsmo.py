@@ -110,7 +110,6 @@ def main(*args):
         return f'(?P<{name}>{ch}+)'
     user_rgx = w("user")
     domain_rgx = w("domain", r"[A-Za-z0-9\-\.]")
-    #url_chars = r"[A–Za–z0–9\-\._~!$&'()*+,;=:@]"
     path_chars = r"[A-Za-z0-9\-\./]"
     path_rgx = w("path", path_chars)
     branch_rgx = w("branch", r"[\w\-]")
