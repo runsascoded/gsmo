@@ -148,7 +148,7 @@ def test_clone_local():
     with git.clone.tmp(
         hailstone_dir,
         branch=working_branch,
-        init=sha,
+        ref=sha,
     ) as tmpdir:
         # Use this temporary clone of the example/hailstone module as a "base" from which to demonstrate running `gsmo`
         # in further temporary Git clone directories and upstreaming changes back to the "base" directory.
@@ -200,7 +200,7 @@ def test_clone_remote():
     with git.clone.tmp(
         url,
         branch=branch,
-        init=sha0,
+        ref=sha0,
     ):
         run('git','push',url,branch)
         try:
@@ -234,7 +234,7 @@ def test_post_run_push():
         hailstone_dir,
         '--bare',
         branch=branch,
-        init=sha0,
+        ref=sha0,
     ) as origin:
         #run('git','config','receive.denyCurrentBranch','ignore')  # let this repository
         with git.clone.tmp(origin, branch=branch) as wd:
