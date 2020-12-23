@@ -102,8 +102,10 @@ def main(*args):
     force_local = args.force_local
     force_remote = args.force_remote
     assert not (force_local and force_remote)
-    branch = args.branch
-    clone = args.clone
+
+    # these are only set in run mode
+    branch = args.__dict__.get('branch')
+    clone = args.__dict__.get('clone')
     def w(name, ch=r'\w'):
         return f'(?P<{name}>{ch}+)'
     user_rgx = w("user")
