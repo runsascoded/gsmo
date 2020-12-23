@@ -1,16 +1,18 @@
 # gsmo
-Commonsense Jupyter/Docker/Git integrations.
+Commonsense Git, Docker, and Jupyter integrations.
 
-`gsmo` streamlines mounting and working with Git repositories in Docker containers.
+- mount local Git clones into purpose-built Docker containers
+- easily configure dependencies, set useful default Git configs, and mirror host user/group so that Git commits in container transparently exist on the host
+- run scripts [non-interactively](#non-interactive), automatically Git-commit updated files
+- run "remotely" against Git repositories, pushing changes upstream for static, serverless workflows
+- easily boot a [Jupyter server](#jupyter-server) or [Bash shell](#bash-shell) from a clone and its corresponding Docker image, for interactive work.
 
-A purpose-built Docker image+container are created (see [`gsmo.yml`] for configuration options), and Git configs are embedded so that commits inside the Docker container exist outside it (with correct permissions, authorship info, etc.).
-
-Local notebooks or scripts can be executed [non-interactively](#non-interactive) (with results automatically committed to Git), or a [Jupyter server](#jupyter-server) or [Bash shell](#bash-shell) can be booted for interactive work.
+See [`gsmo.yml`] for configuration options
 
 ## Usage
 
-### `gsmo run`: execute notebooks non-interactively <a id="non-interactive"></a>
-`gsmo` helps run notebooks and scripts in a reproducible fashion (inside Docker containers), and pass-through changes (especially Git commits) to the host machine:
+### Run notebooks non-interactively <a id="non-interactive"></a>
+`gsmo` helps run notebooks and scripts in a reproducible fashion (inside Docker containers), and pass-through changes (Git commits) to the host machine:
 
 Running:
 ```bash
@@ -23,10 +25,10 @@ in a project directory will:
 - run the project's `run.ipynb` notebook inside that container
 - Git-commit results  
 
-### Interactive <a id="interactive"></a>
+### Run interactively <a id="interactive"></a>
 
 #### Jupyter Server <a id="jupyter-server"></a>
-Build a Docker image from the current directory, and launch a Jupyter server with the current directory mounted (and various Git- and OS-level configs set, so that changes/commits are reflected on the host machine):
+Build a Docker image from the current directory, configured by [`gsmo.yml`], and launch a Jupyter server with the current directory mounted (and various Git- and OS-level configs set, so that changes/commits transparently pass through to the host machine):
 ```bash
 gsmo jupyter  # or: gsmo j
 ```
@@ -34,7 +36,7 @@ gsmo jupyter  # or: gsmo j
 - easily configure Python/Linux environment using [`gsmo.yml`]
 
 #### Bash shell <a id="bash-shell"></a>
-Build a Docker image from the current directory, and launch a Bash shell with it mounted (and various Git- and OS-level configs set, so that changes/commits are reflected on the host machine):
+Build a Docker image from the current directory, configured by [`gsmo.yml`], and launch a Bash shell with it mounted (and various Git- and OS-level configs set, so that changes/commits transparently pass through to the host machine):
 ```bash
 gsmo sh
 ```
@@ -44,7 +46,9 @@ gsmo sh
 ### `gsmo.yml` <a id="gsmo-yml"></a>
 When you run `gsmo` in a directory, it will look for a `gsmo.yml` file in the current directory with any of the following fields and build a corresponding Docker image:
 
-#### Docker configs
+#### General configs
+(see `gsmo -h` for full/authoritative list):
+
 - `name` (`str`; default: project directory's basename): module name; also used as repository for built Docker image
 - `pip` (`str` or `List[str]`): `pip` libraries to install
 - `apt` (`str` or `List[str]`): `apt` libraries to install
@@ -72,7 +76,44 @@ These configs are passed into the Docker container / pertain to the running of a
 - `commit` (`str` or `List[str]`; default: `out` config dir): paths to Git commit after a run (in non-interactive mode)
 - `out` (`str`; default `nbs`): directory to write executed notebooks to
 
+```bash
+gsmo run -h
+```
+```
+usage: gsmo [input] run [-h] [-b BRANCH] [--clone] [--commit COMMIT] [-C DIR] [-o OUT] [--push PUSH] [-x RUN] [-y YAML] [-Y YAML_PATH]
+
+optional arguments:
+  -h, --help            show this help message and exit
+  -b BRANCH, --branch BRANCH
+                        Branch to clone, work in, and push results back to. Can also be passed as a trailing '@<branch>' slug on directory path or remote Git
+                        repo URL. For local repositories, implies --clone
+  --clone               Clone local directory into a temporary dir for duration of the run
+  --commit COMMIT       Paths to `git add` and commit after running
+  -C DIR, --dir DIR     Resolve paths (incl. mounts) relative to this directory (default: current directory)
+  -o OUT, --out OUT     Path or directory to write output notebook to (relative to `--dir` directory; default: "nbs")
+  --push PUSH           Push to this remote spec when done running
+  -x RUN, --run RUN, --execute RUN
+                        Notebook to run (default: run.ipynb)
+  -y YAML, --yaml YAML  YAML string(s) with configuration settings for the module being run
+  -Y YAML_PATH, --yaml-path YAML_PATH
+                        YAML file(s) with configuration settings for the module being run
+```
+
 #### `gsmo jupyter` configs
+```bash
+gsmo jupyter -h
+```
+```
+usage: gsmo [input] jupyter [-h] [-d] [-D] [-O] [-s] [--dir DIR]
+
+optional arguments:
+  -h, --help       show this help message and exit
+  -d, --detach     When booting into Jupyter server mode, detach the container
+  -D, --no-docker  Run in the current shell instead of in Docker
+  -O, --no-open    Skip opening Jupyter notebook server in browser
+  -s, --shell      Open a /bin/bash shell in the container (instead of running a jupyter server)
+  --dir DIR        Root dir for jupyter notebook server (default: --dst / `/src`
+```
 
 ### `Dockerfile`
 When building the Docker image (in any of the above modes), if a `Dockerfile` is present in the repository, it will be built and used as the base image (and any `gsmo.yml` configs applied on top of it).
