@@ -35,6 +35,7 @@ class Modules:
                     with open(tmp.name,'w') as f:
                         import yaml
                         yaml.safe_dump(kwargs, f, sort_keys=False)
+                    print(f'wrote run configs to {tmp.name}')
                     cmd = []
                     if 'GSMO_IMAGE' in env:
                         cmd += ['-i',env['GSMO_IMAGE']]

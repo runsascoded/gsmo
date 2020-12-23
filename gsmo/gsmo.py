@@ -638,6 +638,7 @@ def main(*args):
             entrypoint = join(gsmo_dir,'dind_entrypoint.sh')
             groups.append(docker_sock.gid)
 
+        run_config_file = None
         if run_mode:
             # TODO: this doesn't work when running in an existing (`jupyter` or `shell`) container, as the container
             #  won't have the run_config path mounted in, and the current follow-on run can't add a new mount; maybe
@@ -657,153 +658,158 @@ def main(*args):
         else:
             print('no run mode')
 
-        def get_git_id(k, fmt):
-            try:
-                v = line('git','config',f'user.{k}')
-            except CalledProcessError:
-                v = line('git','log','-n','1',f'--format={fmt}')
-                stderr.write(f'Falling back to Git user {k} from most recent commit: {v}\n')
-            return v
+        try:
+            def get_git_id(k, fmt):
+                try:
+                    v = line('git','config',f'user.{k}')
+                except CalledProcessError:
+                    v = line('git','log','-n','1',f'--format={fmt}')
+                    stderr.write(f'Falling back to Git user {k} from most recent commit: {v}\n')
+                return v
 
-        # Get Git user name/email for propagating into image
-        git_id = o(
-            name  = get_git_id( 'name', '%an'),
-            email = get_git_id('email', '%ae'),
-        )
+            # Get Git user name/email for propagating into image
+            git_id = o(
+                name  = get_git_id( 'name', '%an'),
+                email = get_git_id('email', '%ae'),
+            )
 
-        # Set up author info for git committing
-        container_envs = {
-            **container_envs,
-           'GIT_AUTHOR_NAME'    : git_id.name,
-           'GIT_AUTHOR_EMAIL'   : git_id.email,
-           'GIT_COMMITTER_NAME' : git_id.name,
-           'GIT_COMMITTER_EMAIL': git_id.email,
-        }
+            # Set up author info for git committing
+            container_envs = {
+                **container_envs,
+               'GIT_AUTHOR_NAME'    : git_id.name,
+               'GIT_AUTHOR_EMAIL'   : git_id.email,
+               'GIT_COMMITTER_NAME' : git_id.name,
+               'GIT_COMMITTER_EMAIL': git_id.email,
+            }
 
-        # Build Docker CLI args
-        env_args = [ [ '-e', f'{k}={v}' ] for k, v in container_envs.items() ]
-        if container_env_file: env_args += [ '--env-file', container_env_file ]
-        port_args = [ [ '-p', port ] for port in ports ]
-        group_args = [ [ '--group-add', group ] for group in groups ]
-        entrypoint_args = [ '--entrypoint', entrypoint ]
-        workdir_args = [ '--workdir', workdir ]
-        name_args = [ '--name', name ]
+            # Build Docker CLI args
+            env_args = [ [ '-e', f'{k}={v}' ] for k, v in container_envs.items() ]
+            if container_env_file: env_args += [ '--env-file', container_env_file ]
+            port_args = [ [ '-p', port ] for port in ports ]
+            group_args = [ [ '--group-add', group ] for group in groups ]
+            entrypoint_args = [ '--entrypoint', entrypoint ]
+            workdir_args = [ '--workdir', workdir ]
+            name_args = [ '--name', name ]
 
-        label_args = ['-l','gsmo'] + [ ['-l',f'gsmo.{k}={v}'] for k,v in default_kvs.items() ]
-        if labels:
-            label_args += [ [ '-l', f'{k}={v}' ] for k,v in labels.items() ]
+            label_args = ['-l','gsmo'] + [ ['-l',f'gsmo.{k}={v}'] for k,v in default_kvs.items() ]
+            if labels:
+                label_args += [ [ '-l', f'{k}={v}' ] for k,v in labels.items() ]
 
-        if labels_file:
-            label_args += [ '--label-file', labels_file ]
+            if labels_file:
+                label_args += [ '--label-file', labels_file ]
 
-        exec_flags = \
-            flags + \
-            env_args + \
-            workdir_args
+            exec_flags = \
+                flags + \
+                env_args + \
+                workdir_args
 
-        print(f'mounts: {mounts}')
-        if run_in_existing_container:
-            all_args = \
-                exec_flags + \
-                [name] + \
-                [entrypoint] + \
-                cmd_args
-        else:
-            all_flags = \
-                exec_flags + \
-                mounts.args() + \
-                port_args + \
-                user_args + \
-                label_args + \
-                group_args
-
-            all_args = \
-                all_flags + \
-                entrypoint_args + \
-                name_args + \
-                [image] + \
-                cmd_args
-
-        if use_docker:
-            if jupyter_mode and check('which', 'open'):
-                # 1. run docker container in detached mode
-                # 2. parse+open jupyter token URL in browser (try every 1s)
-                # 3. re-attach container
-                if run_in_existing_container:
-                    cmd = [
-                        'docker','exec',
-                        '-d',
-                        all_args,
-                    ]
-                else:
-                    cmd = [
-                        'docker','run',
-                        '-d',
-                        all_args,
-                    ]
-                if dry_run:
-                    run(*cmd, dry_run=True)
-                else:
-                    def get_jupyter_link():
-                        lns = lines('docker','exec',name,'jupyter','notebook','list')
-                        [ first, *rest ] = lns
-                        if first != 'Currently running servers:':
-                            raise Exception('Unexpected `jupyter notebook list` output:\n\t%s' % "\n\t".join(lns))
-                        ln = singleton(rest, empty_ok=True)
-                        if ln:
-                            rgx = f'(?P<url>http://0\\.0\\.0\\.0:(?P<port>\\d+)/\\?token=(?P<token>[0-9a-f]+)) :: {jupyter_dir}'
-                            if not (m := match(rgx, ln)):
-                                raise RuntimeError(f'Unrecognized notebook server line: {ln}')
-                            if m['port'] != str(jupyter_dst_port):
-                                raise RuntimeError(f'Jupyter running on unexpected port {m["port"]} (!= {jupyter_dst_port})')
-                            token = m['token']
-                            url = f'http://127.0.0.1:{jupyter_src_port}?token={token}'
-                            return url
-                        else:
-                            return None
-
-                    run(*cmd)
-                    from utz import backoff
-                    url = backoff(get_jupyter_link, init=.5, step=1.6, max=5)
-                    if jupyter_open:
-                        try:
-                            run('open',url)
-                        except CalledProcessError:
-                            stderr.write('Failed to open %s\n' % url)
-                    if shell:
-                        run('docker','exec','-it',name,'/usr/bin/env','bash')
-                    else:
-                        if not detach:
-                            run('docker','attach',name)
+            print(f'mounts: {mounts}')
+            if run_in_existing_container:
+                all_args = \
+                    exec_flags + \
+                    [name] + \
+                    [entrypoint] + \
+                    cmd_args
             else:
-                print(f'running from {cwd}')
-                if run_in_existing_container:
-                    run(
-                        'docker','exec',
-                        all_args,
-                        dry_run=dry_run,
-                    )
-                else:
-                    run(
-                        'docker','run',
-                        all_args,
-                        dry_run=dry_run,
-                    )
-                if run_mode and push_refs:
-                    for ref in push_refs:
-                        REMOTE_REFSPEC_REGEX = '(?P<remote>[^/]+)(?:/(?P<spec>.*))?'
-                        if not (m := match(REMOTE_REFSPEC_REGEX, ref)):
-                            raise ValueError(f'Invalid push ref: {ref}')
-                        run('git','push',m['remote'],m['spec'])
-        else:
-            if jupyter_src_port != jupyter_dst_port:
-                raise ValueError(f'Mismatching jupyter ports in non-docker mode: {jupyter_src_port} != {jupyter_dst_port}')
-            jupyter_port = jupyter_src_port
-            cmd = ['jupyter','notebook','--port',jupyter_port]
-            if not jupyter_open:
-                cmd += ['--no-browser']
-            run(*cmd, dry_run=dry_run)
+                all_flags = \
+                    exec_flags + \
+                    mounts.args() + \
+                    port_args + \
+                    user_args + \
+                    label_args + \
+                    group_args
 
+                all_args = \
+                    all_flags + \
+                    entrypoint_args + \
+                    name_args + \
+                    [image] + \
+                    cmd_args
+
+            if use_docker:
+                if jupyter_mode and check('which', 'open'):
+                    # 1. run docker container in detached mode
+                    # 2. parse+open jupyter token URL in browser (try every 1s)
+                    # 3. re-attach container
+                    if run_in_existing_container:
+                        cmd = [
+                            'docker','exec',
+                            '-d',
+                            all_args,
+                        ]
+                    else:
+                        cmd = [
+                            'docker','run',
+                            '-d',
+                            all_args,
+                        ]
+                    if dry_run:
+                        run(*cmd, dry_run=True)
+                    else:
+                        def get_jupyter_link():
+                            lns = lines('docker','exec',name,'jupyter','notebook','list')
+                            [ first, *rest ] = lns
+                            if first != 'Currently running servers:':
+                                raise Exception('Unexpected `jupyter notebook list` output:\n\t%s' % "\n\t".join(lns))
+                            ln = singleton(rest, empty_ok=True)
+                            if ln:
+                                rgx = f'(?P<url>http://0\\.0\\.0\\.0:(?P<port>\\d+)/\\?token=(?P<token>[0-9a-f]+)) :: {jupyter_dir}'
+                                if not (m := match(rgx, ln)):
+                                    raise RuntimeError(f'Unrecognized notebook server line: {ln}')
+                                if m['port'] != str(jupyter_dst_port):
+                                    raise RuntimeError(f'Jupyter running on unexpected port {m["port"]} (!= {jupyter_dst_port})')
+                                token = m['token']
+                                url = f'http://127.0.0.1:{jupyter_src_port}?token={token}'
+                                return url
+                            else:
+                                return None
+
+                        run(*cmd)
+                        from utz import backoff
+                        url = backoff(get_jupyter_link, init=.5, step=1.6, max=5)
+                        if jupyter_open:
+                            try:
+                                run('open',url)
+                            except CalledProcessError:
+                                stderr.write('Failed to open %s\n' % url)
+                        if shell:
+                            run('docker','exec','-it',name,'/usr/bin/env','bash')
+                        else:
+                            if not detach:
+                                run('docker','attach',name)
+                else:
+                    print(f'running from {cwd}')
+                    if run_in_existing_container:
+                        run(
+                            'docker','exec',
+                            all_args,
+                            dry_run=dry_run,
+                        )
+                    else:
+                        run(
+                            'docker','run',
+                            all_args,
+                            dry_run=dry_run,
+                        )
+                    if run_mode and push_refs:
+                        for ref in push_refs:
+                            REMOTE_REFSPEC_REGEX = '(?P<remote>[^/]+)(?:/(?P<spec>.*))?'
+                            if not (m := match(REMOTE_REFSPEC_REGEX, ref)):
+                                raise ValueError(f'Invalid push ref: {ref}')
+                            run('git','push',m['remote'],m['spec'])
+            else:
+                if jupyter_src_port != jupyter_dst_port:
+                    raise ValueError(f'Mismatching jupyter ports in non-docker mode: {jupyter_src_port} != {jupyter_dst_port}')
+                jupyter_port = jupyter_src_port
+                cmd = ['jupyter','notebook','--port',jupyter_port]
+                if not jupyter_open:
+                    cmd += ['--no-browser']
+                run(*cmd, dry_run=dry_run)
+        finally:
+            print(f'Cleanup run config file? {run_config_file}')
+            if run_config_file:
+                remove(run_config_file.name)
+                print(f'Cleaned up run config {run_config_path} ({exists(run_config_file.name)})')
 
 if __name__ == '__main__':
     main()
