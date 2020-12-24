@@ -234,7 +234,7 @@ def test_post_run_push():
         branch=branch,
         ref=sha0,
     ) as origin:
-        flags = ['-I','-i',':']
+        flags = ['-I','-i',':','-v',origin]
         with git.clone.tmp(origin, branch=branch) as wd:
             gsmo.main(*flags,'run','--push','origin')
             sha1 = git.sha()

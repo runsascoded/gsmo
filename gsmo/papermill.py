@@ -50,6 +50,7 @@ def execute(
     start_sha=None,
     msg_path='_MSG',
     tmp_output=True,
+    push=None,
     *args,
     **kwargs
 ):
@@ -212,6 +213,32 @@ def execute(
             tree = repo.tree().hexsha
             head = line('git','commit-tree',tree,'-p',start_sha,'-p',last_sha,'-m',msg)
             run('git','reset',head)
+
+        def parse_push(push):
+            pushes = []
+            if push is True:
+                pushes += [()]
+            elif isinstance(push, str):
+                pushes += [(push,)]
+            elif isinstance(push, dict):
+                for remote, spec in push.items():
+                    if spec:
+                        pushes += [(remote, spec)]
+                    else:
+                        pushes += [(remote,)]
+            elif isinstance(push, tuple):
+                pushes += [push]
+            elif isinstance(push, list):
+                pushes += [ t for p in push for t in parse_push(p) ]
+            elif push is None:
+                pass
+            else:
+                raise ValueError(f'Invalid `push` param: {push}')
+            return pushes
+
+        pushes = parse_push(push)
+        for push in pushes:
+            run('git','push',*push)
 
         if exc:
             raise exc

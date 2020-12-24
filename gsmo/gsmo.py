@@ -450,6 +450,9 @@ def main(*args):
             if commit:
                 cmd_args += [ ['--commit',path] for path in commit]
             push_refs = get('push', [])
+            if push_refs:
+                for ref in push_refs:
+                    cmd_args += ['--push', ref]
 
         if dind:
             [gid,grp] = line(
@@ -791,12 +794,6 @@ def main(*args):
                             all_args,
                             dry_run=dry_run,
                         )
-                    if run_mode and push_refs:
-                        for ref in push_refs:
-                            REMOTE_REFSPEC_REGEX = '(?P<remote>[^/]+)(?:/(?P<spec>.*))?'
-                            if not (m := match(REMOTE_REFSPEC_REGEX, ref)):
-                                raise ValueError(f'Invalid push ref: {ref}')
-                            run('git','push',m['remote'],m['spec'])
             else:
                 if jupyter_src_port != jupyter_dst_port:
                     raise ValueError(f'Mismatching jupyter ports in non-docker mode: {jupyter_src_port} != {jupyter_dst_port}')

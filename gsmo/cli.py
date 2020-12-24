@@ -1,5 +1,6 @@
 from os import listdir
 from os.path import isdir
+from re import match
 import yaml
 
 class Arg:
@@ -19,6 +20,18 @@ run_args = [
     Arg('-y','--yaml',action='append',help='YAML string(s) with configuration settings for the module being run'),
     Arg('-Y','--yaml-path',action='append',help='YAML file(s) with configuration settings for the module being run'),  # TODO: update example nb
 ]
+
+REMOTE_REFSPEC_REGEX = '(?P<remote>[^/]+)(?:/(?P<spec>.*))?'
+def parse_ref(ref):
+    if not (m := match(REMOTE_REFSPEC_REGEX, ref)):
+        raise ValueError(f'Invalid push ref: {ref}')
+    remote = m['remote']
+    spec = m['spec']
+    if spec:
+        return (remote, spec)
+    else:
+        return (remote,)
+
 
 def load_run_config(args):
     # Load configs to pass into run container

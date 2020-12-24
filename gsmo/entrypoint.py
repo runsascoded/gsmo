@@ -4,7 +4,7 @@ from argparse import ArgumentParser
 from functools import partial
 from os import chdir, getcwd
 
-from .cli import run_args, load_run_config
+from .cli import run_args, load_run_config, parse_ref
 from .config import Config, DEFAULT_RUN_NB, DEFAULT_NB_DIR
 from .papermill import execute
 
@@ -26,6 +26,9 @@ def main(args=None):
     commit = config.get('commit', True)
 
     progress_bar = args.progress
+    push_refs = args.push
+    if push_refs:
+        push_refs = [ parse_ref(r) for r in push_refs ]
 
     dir = get('dir')
     if dir: chdir(dir)
@@ -36,6 +39,7 @@ def main(args=None):
         cwd=getcwd(),
         progress_bar=progress_bar,
         commit=commit,
+        push=push_refs,
     )
 
     for k,v in run_config.items():
