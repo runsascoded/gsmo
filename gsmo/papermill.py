@@ -11,7 +11,9 @@ from shutil import move
 from sys import executable
 from tempfile import NamedTemporaryFile
 from traceback import format_exception
+from typing import Iterable
 
+from gsmo.cli import Spec
 from papermill import execute_notebook, PapermillExecutionError
 from utz.collections import singleton
 from utz import git
@@ -214,29 +216,12 @@ def execute(
             head = line('git','commit-tree',tree,'-p',start_sha,'-p',last_sha,'-m',msg)
             run('git','reset',head)
 
-        def parse_push(push):
+        if isinstance(push, str):
+            pushes = [Spec(push)]
+        elif isinstance(push, Iterable):
+            pushes = [ Spec(spec) for spec in push ]
+        else:
             pushes = []
-            if push is True:
-                pushes += [()]
-            elif isinstance(push, str):
-                pushes += [(push,)]
-            elif isinstance(push, dict):
-                for remote, spec in push.items():
-                    if spec:
-                        pushes += [(remote, spec)]
-                    else:
-                        pushes += [(remote,)]
-            elif isinstance(push, tuple):
-                pushes += [push]
-            elif isinstance(push, list):
-                pushes += [ t for p in push for t in parse_push(p) ]
-            elif push is None:
-                pass
-            else:
-                raise ValueError(f'Invalid `push` param: {push}')
-            return pushes
-
-        pushes = parse_push(push)
         for push in pushes:
             run('git','push',*push)
 
