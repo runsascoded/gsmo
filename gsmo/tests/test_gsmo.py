@@ -223,7 +223,7 @@ def test_clone_remote():
             run('git','push','--delete',url,branch)
 
 
-def test_post_run_push():
+def test_post_run_push_bare():
     branch = 'gsmo-test'
     sha0 = 'e0add3d'
     gsmo_dir = dirname(dirname(gsmo.__file__))
@@ -235,7 +235,7 @@ def test_post_run_push():
         ref=sha0,
     ) as origin:
         flags = ['-I','-i',':','-v',origin]
-        with git.clone.tmp(origin, branch=branch) as wd:
+        with git.clone.tmp(origin, branch=branch):
             gsmo.main(*flags,'run','--push','origin')
             sha1 = git.sha()
             assert git.sha(f'origin/{branch}') == sha1
@@ -246,7 +246,7 @@ def test_post_run_push():
             assert git.sha(f'{branch}^') == sha0
             assert lines('git','show','HEAD:value') == ['3']
 
-        with git.clone.tmp(origin, branch=branch) as wd:
+        with git.clone.tmp(origin, branch=branch):
             gsmo.main(*flags,'run','--push','origin')
             sha2 = git.sha()
             assert git.sha(f'origin/{branch}') == sha2
@@ -256,3 +256,39 @@ def test_post_run_push():
             assert git.sha(branch) == sha2
             assert git.sha(f'{branch}^') == sha1
             assert lines('git','show','HEAD:value') == ['10']
+
+
+def test_post_run_pull():
+    branch = 'gsmo-test'
+    sha0 = 'e0add3d'
+    gsmo_dir = dirname(dirname(gsmo.__file__))
+    hailstone_dir = join(gsmo_dir, 'example/hailstone')
+    with git.clone.tmp(
+        hailstone_dir,
+        branch=branch,
+        ref=sha0,
+    ) as origin:
+        flags = ['-I','-i',':','-v',origin]
+        with git.clone.tmp(origin, branch=branch):
+            gsmo.main(*flags,'run','--push','origin!')
+            sha1 = git.sha()
+            assert git.sha(f'origin/{branch}') == sha1
+            assert lines('cat','value') == ['3']
+
+        with cd(origin):
+            assert git.sha(branch) == sha1
+            assert git.sha(f'{branch}^') == sha0
+            assert lines('git','show','HEAD:value') == ['3']
+            assert not lines('git','status','--short')
+
+        with git.clone.tmp(origin, branch=branch):
+            gsmo.main(*flags,'run','--push','origin!')
+            sha2 = git.sha()
+            assert git.sha(f'origin/{branch}') == sha2
+            assert lines('cat','value') == ['10']
+
+        with cd(origin):
+            assert git.sha(branch) == sha2
+            assert git.sha(f'{branch}^') == sha1
+            assert lines('git','show','HEAD:value') == ['10']
+            assert not lines('git','status','--short')

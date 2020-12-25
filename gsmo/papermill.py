@@ -1,23 +1,20 @@
-#!/usr/bin/env python
-# coding: utf-8
-
 from inspect import getfullargspec
 import json
 from jupyter_client import kernelspec
 from os import getcwd, makedirs, remove
 from os.path import abspath, basename, dirname, exists, join, splitext
 from pathlib import Path
+from re import match
 from shutil import move
 from sys import executable
 from tempfile import NamedTemporaryFile
 from traceback import format_exception
 from typing import Iterable
 
-from gsmo.cli import Spec
+from gsmo.git import Spec, GIT_SSH_URL_REGEX
 from papermill import execute_notebook, PapermillExecutionError
-from utz.collections import singleton
-from utz import git
-from utz.process import line, run
+from utz import b62, cd, check, git, line, now, run, singleton, CalledProcessError
+
 
 EARLY_EXIT_EXCEPTION_MSG_PREFIX = 'OK: '
 
@@ -208,7 +205,7 @@ def execute(
             else:
                 msg = name
         last_sha = git.head.sha()
-        run(['git','add'] + commit)
+        run('git','add', commit)
         run('git','commit','-m',msg)
         if start_sha != last_sha:
             repo = git.Repo()
@@ -223,7 +220,28 @@ def execute(
         else:
             pushes = []
         for push in pushes:
-            run('git','push',*push)
+            if push.pull:
+                remote = push.remote
+                url = run('git','remote','get-url',remote)
+                tmp_branch = f'tmp-{b62(now().ms)}'
+                if (m := match(GIT_SSH_URL_REGEX, url)):
+                    host = m['host']
+                    path = m['path']
+                    tmp_branch = f'tmp-{b62(now().ms)}'
+                    run('git','push',remote,f'{push.src}:{tmp_branch}')
+                    run('ssh',host,f'cd {path} && (git merge {tmp_branch} || (git merge --abort; exit 1))')
+                else:
+                    if not exists(url):
+                        raise RuntimeError(f"Remote {remote} URL {url} doesn't appear to be an SSH URL or extant local directory")
+                    run('git','push',remote,f'{push.src}:{tmp_branch}')
+                    with cd(url):
+                        try:
+                            run('git','merge',f'{tmp_branch}')
+                        except CalledProcessError as e:
+                            run('git','merge','--abort')
+                            raise e
+            else:
+                run('git','push',*push)
 
         if exc:
             raise exc
