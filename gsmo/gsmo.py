@@ -6,6 +6,7 @@ from utz.docker.dsl import *
 from .cli import Arg, run_args, load_run_config
 from .config import clean_group, lists, version, Config, DEFAULT_IMAGE_REPO, DEFAULT_SRC_DIR_NAME, DEFAULT_SRC_MOUNT_DIR, DEFAULT_RUN_NB, IMAGE_HOME, DEFAULT_GROUP, DEFAULT_USER, DEFAULT_IMAGE, DEFAULT_DIND_IMAGE, GSMO_DIR, GSMO_DIR_NAME
 from .err import OK, RAISE, WARN
+from .git import GIT_HTTP_URL_REGEX, GIT_SSH_URL_REGEX
 from .mount import Mount, Mounts
 
 def main(*args):
@@ -107,18 +108,12 @@ def main(*args):
     # these are only set in run mode
     branch = args.__dict__.get('branch')
     clone = args.__dict__.get('clone')
-    def w(name, ch=r'\w'):
-        return f'(?P<{name}>{ch}+)'
-    user_rgx = w("user")
-    domain_rgx = w("domain", r"[A-Za-z0-9\-\.]")
-    path_chars = r"[A-Za-z0-9\-\./]"
-    path_rgx = w("path", path_chars)
-    branch_rgx = w("branch", r"[\w\-]")
-    port_rgx = w('port',r'\d')
-    GIT_SSH_URL_REGEX = '(?:ssh://)?(?:%s@)?%s:%s(?:@%s)?' % (user_rgx, domain_rgx, path_rgx, branch_rgx)
-    GIT_HTTP_URL_REGEX = '(?:https?://)?%s(?::%s)?:%s(?:@%s)?' % (domain_rgx, port_rgx, path_rgx, branch_rgx)
     if input:
-        if (force_remote or (m := match(GIT_SSH_URL_REGEX, input)) or (m := match(GIT_HTTP_URL_REGEX, input))) and not force_local:
+        if (
+            force_remote or
+            (m := match(GIT_SSH_URL_REGEX, input)) or
+            (m := match(GIT_HTTP_URL_REGEX, input))
+        ) and not force_local:
             url_branch = m['branch'] if m else None
             if branch is None and url_branch:
                 branch = url_branch

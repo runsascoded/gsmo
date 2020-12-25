@@ -1,6 +1,20 @@
 from re import fullmatch
 
 
+def w(name, ch=r'\w'):
+    return f'(?P<{name}>{ch}+)'
+user_rgx = w("user")
+domain_rgx = w("domain", r"[A-Za-z0-9\-\.]")
+ssh_host_rgx = '(?P<host>(?:%s@)?%s)' % (user_rgx, domain_rgx)
+path_chars = r"[A-Za-z0-9\-\./]"
+path_rgx = w("path", path_chars)
+branch_rgx = w("branch", r"[\w\-]")
+port_rgx = w('port',r'\d')
+
+GIT_SSH_URL_REGEX = '(?:ssh://)?%s:%s(?:@%s)?' % (ssh_host_rgx, path_rgx, branch_rgx)
+GIT_HTTP_URL_REGEX = '(?:https?://)?%s(?::%s)?:%s(?:@%s)?' % (domain_rgx, port_rgx, path_rgx, branch_rgx)
+
+
 class Idem(type):
     def __call__(cls, *args, **kwargs):
         if len(args) == 1 and isinstance(args[0], Spec):
@@ -75,7 +89,8 @@ class Spec(metaclass=Idem):
             if self.remote is None and (self.src is not None or self.dst is not None):
                 raise ValueError(f'Invalid spec: (src || dst) ⟹ remote. ({self.remote=}, {self.src=}, {self.dst=})')
 
-            if self.pull and not (self.src and self.dst):
+            # in `pull` mode, both or neither of {src,dst} must be set
+            if self.pull and (bool(self.src) != bool(self.dst)):
                 raise ValueError(f'pull ⟹ (src && dst): ({self.remote=}, {self.src=}, {self.dst=}, {self.pull=})')
 
     def __str__(self):

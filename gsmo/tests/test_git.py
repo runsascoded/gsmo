@@ -32,9 +32,7 @@ def test_spec():
     check(('origin','aaa','aaa',True), ('origin', 'aaa'), 'origin/aaa!')
 
     check(('origin',), ('origin',), 'origin')
-    with pytest.raises(ValueError) as e:
-        check(('origin!',), (), '')
-    e.match('(src && dst)')
+    check(('origin!',), ('origin',), 'origin!')
 
     check(('origin/aaa:',), ('origin', 'aaa:'), 'origin/aaa:')
     check(('origin','aaa:',), ('origin', 'aaa:'), 'origin/aaa:')
