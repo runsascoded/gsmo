@@ -222,24 +222,39 @@ def execute(
         for push in pushes:
             if push.pull:
                 remote = push.remote
-                url = run('git','remote','get-url',remote)
+                url = line('git','remote','get-url',remote)
                 tmp_branch = f'tmp-{b62(now().ms)}'
+                src = push.src or 'HEAD'
                 if (m := match(GIT_SSH_URL_REGEX, url)):
                     host = m['host']
                     path = m['path']
-                    tmp_branch = f'tmp-{b62(now().ms)}'
-                    run('git','push',remote,f'{push.src}:{tmp_branch}')
-                    run('ssh',host,f'cd {path} && (git merge {tmp_branch} || (git merge --abort; exit 1))')
+                    remote_head = line('ssh',host,f'cd {path} && git symbolic-ref -q --short HEAD', err_ok=True)
+                    if remote_head and push.dst and remote_head != push.dst:
+                        print(f'Remote head {remote_head} != push dst {push.dst}; pushing {src} directly…')
+                        run('git','push',remote,f'{src}:{push.dst}')
+                    else:
+                        print(f"Avoiding direct push of {src} to remote HEAD {remote_head}; pushing to {tmp_branch} then merging…")
+                        run('git','push',remote,f'{src}:{tmp_branch}')
+                        run('ssh',host,f'cd {path} && (git merge {tmp_branch} && git branch -d {tmp_branch} || (git merge --abort; exit 1))')
                 else:
                     if not exists(url):
                         raise RuntimeError(f"Remote {remote} URL {url} doesn't appear to be an SSH URL or extant local directory")
-                    run('git','push',remote,f'{push.src}:{tmp_branch}')
                     with cd(url):
-                        try:
-                            run('git','merge',f'{tmp_branch}')
-                        except CalledProcessError as e:
-                            run('git','merge','--abort')
-                            raise e
+                        remote_head = git.branch.current(sha_ok=None)
+                    if remote_head and push.dst and remote_head != push.dst:
+                        print(f'Remote head {remote_head} != push dst {push.dst}; pushing {src} directly…')
+                        run('git','push',remote,f'{src}:{push.dst}')
+                    else:
+                        print(f"Avoiding direct push of {src} to remote HEAD {remote_head}; pushing to {tmp_branch} then merging…")
+                        run('git','push',remote,f'{src}:{tmp_branch}')
+                        with cd(url):
+                            try:
+                                run('git','merge',f'{tmp_branch}')
+                            except CalledProcessError as e:
+                                run('git','merge','--abort')
+                                raise e
+                            run('git','branch','-d',tmp_branch)
+                        run('git','fetch',remote,)
             else:
                 run('git','push',*push)
 

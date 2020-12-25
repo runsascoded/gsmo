@@ -273,6 +273,8 @@ def test_post_run_pull():
             gsmo.main(*flags,'run','--push','origin!')
             sha1 = git.sha()
             assert git.sha(f'origin/{branch}') == sha1
+            # run('git','fetch','origin',branch)
+            # assert git.sha(f'origin/{branch}') == sha1
             assert lines('cat','value') == ['3']
 
         with cd(origin):
@@ -280,6 +282,7 @@ def test_post_run_pull():
             assert git.sha(f'{branch}^') == sha0
             assert lines('git','show','HEAD:value') == ['3']
             assert not lines('git','status','--short')
+            assert lines('git','branch') == [branch]  # tmp branch is deleted
 
         with git.clone.tmp(origin, branch=branch):
             gsmo.main(*flags,'run','--push','origin!')

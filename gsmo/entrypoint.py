@@ -4,9 +4,11 @@ from argparse import ArgumentParser
 from functools import partial
 from os import chdir, getcwd
 
-from .cli import run_args, load_run_config, Spec
+from .cli import run_args, load_run_config
 from .config import Config, DEFAULT_RUN_NB, DEFAULT_NB_DIR
+from .git import Spec
 from .papermill import execute
+
 
 def main(args=None):
     parser = ArgumentParser()
@@ -54,8 +56,8 @@ def main(args=None):
             kwargs[k] = v
 
     print(f'kwargs: {kwargs}, run_config: {run_config}')
-
     execute(**kwargs)
+
 
 if __name__ == '__main__':
     main()
