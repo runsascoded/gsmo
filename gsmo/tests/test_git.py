@@ -20,22 +20,51 @@ def test_spec():
     check(('origin/aaa:bbb',), ('origin', 'aaa:bbb'), 'origin/aaa:bbb')
     check(('origin','aaa:bbb',), ('origin', 'aaa:bbb'), 'origin/aaa:bbb')
     check(('origin','aaa','bbb',), ('origin', 'aaa:bbb'), 'origin/aaa:bbb')
+    check(('origin/aaa:bbb!',), ('origin', 'aaa:bbb'), 'origin/aaa:bbb!')
+    check(('origin','aaa:bbb!',), ('origin', 'aaa:bbb'), 'origin/aaa:bbb!')
+    check(('origin','aaa','bbb',True), ('origin', 'aaa:bbb'), 'origin/aaa:bbb!')
 
     check(('origin/aaa',), ('origin', 'aaa'), 'origin/aaa')
     check(('origin','aaa',), ('origin', 'aaa'), 'origin/aaa')
     check(('origin','aaa','aaa',), ('origin', 'aaa'), 'origin/aaa')
+    check(('origin/aaa!',), ('origin', 'aaa'), 'origin/aaa!')
+    check(('origin','aaa!',), ('origin', 'aaa'), 'origin/aaa!')
+    check(('origin','aaa','aaa',True), ('origin', 'aaa'), 'origin/aaa!')
 
     check(('origin',), ('origin',), 'origin')
+    with pytest.raises(ValueError) as e:
+        check(('origin!',), (), '')
+    e.match('(src && dst)')
 
     check(('origin/aaa:',), ('origin', 'aaa:'), 'origin/aaa:')
     check(('origin','aaa:',), ('origin', 'aaa:'), 'origin/aaa:')
     check(('origin','aaa',''), ('origin', 'aaa:'), 'origin/aaa:')
     check(('origin','aaa',None), ('origin', 'aaa:'), 'origin/aaa:')
 
+    for args in (
+        ('origin/aaa:!',),
+        ('origin','aaa:!',),
+        ('origin','aaa','',True),
+        ('origin','aaa',None,True),
+    ):
+        with pytest.raises(ValueError) as e:
+            check(args, (), '')
+        e.match('src && dst')
+
     check(('origin/:bbb',), ('origin', ':bbb'), 'origin/:bbb')
     check(('origin',':bbb',), ('origin', ':bbb'), 'origin/:bbb')
     check(('origin','','bbb'), ('origin', ':bbb'), 'origin/:bbb')
     check(('origin',None,'bbb'), ('origin', ':bbb'), 'origin/:bbb')
+
+    for args in (
+        ('origin/:bbb!',),
+        ('origin',':bbb!',),
+        ('origin','','bbb',True,),
+        ('origin',None,'bbb!',True,),
+    ):
+        with pytest.raises(ValueError) as e:
+            check(args, (), '')
+        e.match('src && dst')
 
     with pytest.raises(ValueError) as e:
         check((None, 'aaa', None), (), '')
@@ -43,4 +72,8 @@ def test_spec():
 
     with pytest.raises(ValueError) as e:
         check(('origin', 'aaa', 'bbb', 'ccc'), (), '')
-    e.match(escape('too many values to unpack (expected 2)'))
+    e.match(escape('Invalid `pull` param'))
+
+    with pytest.raises(ValueError) as e:
+        check(('origin', 'aaa', 'bbb', 'ccc', 'ddd'), (), '')
+    e.match(escape('too many values to unpack (expected 1)'))
