@@ -1,7 +1,7 @@
 import pytest
 from re import escape
 
-from gsmo.cli import Spec
+from gsmo.git import Spec
 
 
 def test_spec():
