@@ -13,7 +13,7 @@ from typing import Iterable
 
 from gsmo.git import Spec, GIT_SSH_URL_REGEX
 from papermill import execute_notebook, PapermillExecutionError
-from utz import b62, cd, check, git, line, now, run, singleton, CalledProcessError
+from utz import b62, CalledProcessError, cd, check, git, line, lines, now, run, singleton, stderr
 
 
 EARLY_EXIT_EXCEPTION_MSG_PREFIX = 'OK: '
@@ -236,6 +236,7 @@ def execute(
                         print(f"Avoiding direct push of {src} to remote HEAD {remote_head}; pushing to {tmp_branch} then merging…")
                         run('git','push',remote,f'{src}:{tmp_branch}')
                         run('ssh',host,f'cd {path} && (git merge {tmp_branch} && git branch -d {tmp_branch} || (git merge --abort; exit 1))')
+                        run('git','fetch','--prune',remote,)
                 else:
                     if not exists(url):
                         raise RuntimeError(f"Remote {remote} URL {url} doesn't appear to be an SSH URL or extant local directory")
@@ -251,10 +252,15 @@ def execute(
                             try:
                                 run('git','merge',f'{tmp_branch}')
                             except CalledProcessError as e:
-                                run('git','merge','--abort')
+                                conflicts = lines('git','diff','--name-only','--diff-filter=U')
+                                if conflicts:
+                                    stderr.write('Found conflicting files:\n\t%s' % '\n\t'.join(conflicts))
+                                    run('git','merge','--abort')
+                                else:
+                                    stderr.write('Merge failed, presumably due to uncommitted changes:\n\t%s\n' % '\n\t'.join(lines('git','status','--short','-uno')))
                                 raise e
                             run('git','branch','-d',tmp_branch)
-                        run('git','fetch',remote,)
+                        run('git','fetch','--prune',remote,)
             else:
                 run('git','push',*push)
 

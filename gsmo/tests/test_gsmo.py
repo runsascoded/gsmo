@@ -1,6 +1,7 @@
-from gsmo import gsmo
+import pytest
 
-from utz import b62, cd, contextmanager, dirname, env, exists, getcwd, git, join, lines, now, Repo, run, TemporaryDirectory
+from gsmo import gsmo
+from utz import b62, CalledProcessError, cd, contextmanager, dirname, env, exists, getcwd, git, join, lines, match, now, o, Repo, run, TemporaryDirectory
 
 
 @contextmanager
@@ -258,7 +259,47 @@ def test_post_run_push_bare():
             assert lines('git','show','HEAD:value') == ['10']
 
 
+def shas(kvs):
+    for expected_sha, refs in kvs.items():
+        if isinstance(refs, str): refs = [refs]
+        for ref in refs:
+            if ref is None:
+                actual_sha = git.sha()
+            else:
+                actual_sha = git.sha(ref)
+            assert actual_sha == expected_sha, f'{ref} (from {refs}): {actual_sha} != {expected_sha}'
+
+
 def test_post_run_pull():
+    '''Test several cases related to gsmo merging changes into a non-bare upstream repo
+
+    The `origin` of a gsmo working clone may have uncommitted changes at the time of cloning (which are not carried over
+    into the clone), or it may accrue uncommitted or committed changes while the working clone is running. Additionally,
+    such upstream changes may conflict with updates made by the working clone, or may not.
+
+    `gsmo run`'s default approach to "push refs" (e.g. `--push origin`) is to run `git push origin` at the end of a
+    `gsmo run` invocation (e.g. to send changes to the `origin` remote). This is generally sufficient for "bare" remotes
+    (like most Git servers expose, e.g. GitHub, GitLab, etc.).
+
+    However, sometimes the logical `origin` may itself be a non-bare clone (on a local or remote server) where changes
+    are sometimes made directly in the work tree. In this case, more complicated merge/"push" logic can be enabled by
+    appending an "!" to the "push ref" (e.g. `--push 'origin!'`):
+
+    - if the `origin` branch being pushed to is not origin/HEAD (i.e. it is not currently checked out on the origin),
+      normal `git push` is performed
+    - otherwise:
+      - working-clone changes are pushed to a temporary branch (named like `origin/tmp-bTRRyRg`, where the nonce is a
+        base62 serialization of the current time in milliseconds)
+      - gsmo moves into `origin`'s work-tree (either via `cd` or `ssh`), and attempts to `git merge` the temporary
+        branch into the desired destination branch:
+        - if this succeeds, the temporary branch is deleted, and all is considered to be well
+        - otherwise:
+          - if the merge failed due to a merge conflict, the merge is aborted, leaving `origin`'s worktree in its
+            previous, unconflicted state
+          - if it failed due to local, uncommitted changes that would be overwritten, no additional action is taken
+          - in both cases, the dangling tmp-branch is left pointing to the unmerged changes (which should be resolved
+            later / manually)
+    '''
     branch = 'gsmo-test'
     sha0 = 'e0add3d'
     gsmo_dir = dirname(dirname(gsmo.__file__))
@@ -269,29 +310,163 @@ def test_post_run_pull():
         ref=sha0,
     ) as origin:
         flags = ['-I','-i',':','-v',origin]
-        with git.clone.tmp(origin, branch=branch):
-            gsmo.main(*flags,'run','--push','origin!')
-            sha1 = git.sha()
-            assert git.sha(f'origin/{branch}') == sha1
-            # run('git','fetch','origin',branch)
-            # assert git.sha(f'origin/{branch}') == sha1
-            assert lines('cat','value') == ['3']
 
-        with cd(origin):
-            assert git.sha(branch) == sha1
-            assert git.sha(f'{branch}^') == sha0
-            assert lines('git','show','HEAD:value') == ['3']
-            assert not lines('git','status','--short')
-            assert lines('git','branch') == [branch]  # tmp branch is deleted
+        def step(
+            expected_value,
+            parent,
+            status=None,
+            origin_commit=False,
+            expect_fail=False,
+            wd_shas=None,
+            origin_shas=None,
+        ):
+            if isinstance(expected_value, dict):
+                tmpclone_value = expected_value['tmpclone']
+                worktree_value = expected_value['worktree']
+                head_value = expected_value['head']
+            else:
+                tmpclone_value = worktree_value = head_value = expected_value
 
-        with git.clone.tmp(origin, branch=branch):
-            gsmo.main(*flags,'run','--push','origin!')
-            sha2 = git.sha()
-            assert git.sha(f'origin/{branch}') == sha2
-            assert lines('cat','value') == ['10']
+            # collect output values here
+            r = o()
+            r.parent = parent
 
-        with cd(origin):
-            assert git.sha(branch) == sha2
-            assert git.sha(f'{branch}^') == sha1
-            assert lines('git','show','HEAD:value') == ['10']
-            assert not lines('git','status','--short')
+            with git.clone.tmp(origin, branch=branch):
+
+                # optionally create a commit upstream, "underneath" this temporary clone
+                if origin_commit:
+                    with cd(origin):
+                        run('git','commit','-am','concurrent origin commit')
+                        r.l_sha = git.sha()
+
+                # run gsmo, optionally catching a failure
+                if expect_fail:
+                    with pytest.raises(CalledProcessError) as e:
+                        gsmo.main(*flags,'run','--push','origin!')
+                    e.match('Command .* returned non-zero exit status 1')
+                else:
+                    gsmo.main(*flags,'run','--push','origin!')
+
+                sha = git.sha()
+                if origin_commit:
+                    r.r_sha = sha
+                    r.merge_sha = git.sha(f'origin/{branch}')
+                else:
+                    r.sha = sha
+
+                remote_refs = lines('git','for-each-ref','--format=%(refname:short)','refs/remotes/origin')
+                if expect_fail:
+                    # A failed merge will leave a temporary branch on origin, named like `tmp-bTMnva7` (the nonce corresponds
+                    # to epoch milliseconds); back out its name here by verifying+discarding expected origin branches
+                    remote_branches = set([ match('origin/(.*)', ref)[1] for ref in remote_refs ])
+                    expected = {'master', 'HEAD', branch}
+                    assert remote_branches.issuperset(expected)
+                    extra_branches = remote_branches.difference(expected)
+                    assert len(extra_branches) == 1, str(extra_branches)
+                    [tmp_branch] = extra_branches
+                    r.tmp_branch = tmp_branch
+
+                if wd_shas:
+                    shas(wd_shas(r))
+                else:
+                    assert git.sha(f'origin/{branch}') == sha
+
+                assert lines('cat','value') == [str(tmpclone_value)]
+
+            origin_sha = git.sha()
+            r.origin_sha = origin_sha
+            if origin_shas:
+                shas(origin_shas(r))
+            else:
+                assert git.sha(branch) == origin_sha
+                assert git.sha(f'{branch}^') == parent
+
+            assert lines('cat','value') == [str(worktree_value)]
+            assert lines('git','show','HEAD:value') == [str(head_value)]
+            assert lines('git','status','--short') == (status or [])
+
+            expected_branches = {branch, 'master'}
+            if expect_fail:
+                expected_branches.add(tmp_branch)
+
+            assert set(git.branch.ls()) == expected_branches
+
+            if expect_fail:
+                run('git','branch','-D',tmp_branch)
+
+            return origin_sha
+
+        # Run twice, pulling results into `origin` from transient clones
+        sha1 = step(3, sha0)
+        sha2 = step(10, sha1)
+
+        # simulate some uncommitted, unrelated changes laying around in `origin`'s work-tree:
+        with open('README.md','a') as f:
+            f.write('example staged change\n')
+            run('git','add','README.md')
+            f.write('example unstaged change\n')
+
+        # `gsmo` runs successfully from origin's HEAD (which is cloned without origin's uncommitted worktree changes to
+        # README.md). The changes remain in origin's worktree (⚠️ NOTE: previously staged changes become unstaged ⚠️).
+        sha3 = step(5, sha2, status=[' M README.md'])
+        assert lines('git','diff')[-2:] == [
+            '+example staged change',
+            '+example unstaged change',
+        ]
+        assert lines('git','diff','--cached') == []
+
+        # Run again, but after the tmp clone is created, `origin` commits changes to `README.md`; when tmp clone
+        # finishes, it pushes to a tmp branch on origin and triggers a merge into origin/branch, resulting in a commit
+        # diamond.
+        sha4 = step(
+            16, sha3,
+            origin_commit=True,
+            wd_shas=lambda r: {
+                # tmp clone doesn't know abt merge performed on origin as part of pulling from tmp clone
+                r.merge_sha: (f'origin/{branch}', 'origin/HEAD'),
+                r.l_sha: (f'origin/{branch}^'),
+                r.r_sha: (None, branch, f'origin/{branch}^2'),
+                r.parent: (f'origin/{branch}^^', f'{branch}^')
+            },
+            origin_shas=lambda r: {
+                r.origin_sha: branch,
+                r.l_sha: f'{branch}^',
+                r.r_sha: f'{branch}^2',
+                r.parent: f'{branch}^^',
+            },
+        )
+
+        # simulate an uncommitted worktree change that will conflict with the next gsmo run
+        with open('value','w') as f:
+            f.write('-16\n')
+
+        step(
+            o(tmpclone=8, worktree=-16, head=16),
+            parent=sha4,
+            expect_fail=True,
+            wd_shas=lambda r: {
+                r.sha: ('HEAD', branch, f'origin/{r.tmp_branch}',),
+                r.parent: (f'origin/{branch}', 'origin/HEAD',),
+            },
+            origin_shas=lambda r: {
+                r.sha: r.tmp_branch,
+                r.parent: ('HEAD', branch, f'{r.tmp_branch}^'),
+            },
+            status=[' M value'],
+        )
+
+        step(
+            o(tmpclone=8, worktree=-16, head=-16),
+            parent=sha4,
+            wd_shas=lambda r: {
+                r.r_sha: ('HEAD', branch, f'origin/{r.tmp_branch}',),
+                r.parent: (f'origin/{branch}', 'origin/HEAD',),
+            },
+            origin_shas=lambda r: {
+                r.l_sha: ('HEAD', branch),
+                r.r_sha: r.tmp_branch,
+                r.parent: (f'{branch}^', f'{r.tmp_branch}^'),
+            },
+            origin_commit=True,
+            expect_fail=True,
+        )
