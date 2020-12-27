@@ -22,7 +22,6 @@ class Mount:
                 raise RuntimeError(f'Unrecognized mount spec: {src}')
 
         def expand(path): return expandvars(expanduser(path))
-        #src = realpath(abspath(expand(src)))
         src = abspath(expand(src))
         dst = expand(dst)
 

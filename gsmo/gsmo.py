@@ -24,6 +24,7 @@ def main(*args):
     docker_args = [
         Arg('-a','--apt',help='Comma-separated list of packages to apt-get install'),
         Arg('-b','--build-arg',action='append',help='Comma-separated list of packages to apt-get install'),
+        Arg('--ctx',help='Host path to mount as "/src" (cf. `--dst`); defaults to the current directory, but can be set to e.g. ".." to mount in the parent directory (e.g. ensuring a submodule\'s context is available)'),
         Arg('--dev',default=None,action='store_true',help="Run in dev mode: use a 'latest' Docker image tag (':latest' or ':dind') and mount this gsmo directory into the Docker image (as /gsmo)"),
         Arg('--dind',default=None,action='store_true',help="When set, mount /var/run/docker.sock in container (and default to a base image that contains docker installed)"),
         Arg('--dst',help='Path inside Docker container to mount current directory/repo to (default: /src)'),
@@ -175,6 +176,7 @@ def main(*args):
         # directory, which will contain this module's Git dir under its .git/modules); this is necessary for Git operations
         # (specifically commits) to work as expected inside the container
         git_dir = join(src, '.git')
+        ctx = get('ctx', env.get('GSMO_CTX'))
         if isfile(git_dir):
             with open(git_dir,'r') as f:
                 [ ln ] = [ l for line in f.readlines() if (l := line.strip()) ]
@@ -194,6 +196,9 @@ def main(*args):
             print(f'workdir: {workdir}')
             workdir = join(dst, *workdir)
             print(f'Parsed ancestor mount for submodule: {src}:{dst}, workdir {workdir}')
+        elif ctx:
+            src = realpath(ctx)
+            workdir = abspath(cwd)
         else:
             workdir = dst
 

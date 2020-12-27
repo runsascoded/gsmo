@@ -13,7 +13,7 @@ from typing import Iterable
 
 from gsmo.git import Spec, GIT_SSH_URL_REGEX
 from papermill import execute_notebook, PapermillExecutionError
-from utz import b62, CalledProcessError, cd, check, git, line, lines, now, run, singleton, stderr
+from utz import b62, CalledProcessError, cd, git, line, lines, now, nullcontext, run, singleton, stderr
 
 
 EARLY_EXIT_EXCEPTION_MSG_PREFIX = 'OK: '
@@ -59,9 +59,14 @@ def execute(
         input += '.ipynb'
     if not exists(input):
         raise ValueError(f"Nonexistent input notebook: {input} (cwd: {cwd}/{getcwd()})")
+
     if commit:
         if not start_sha:
             start_sha = git.head.sha()
+        commit_ctx = git.txn(start=start_sha)
+    else:
+        commit_ctx = nullcontext()
+
     name = splitext(input)[0]
     if output:
         if not output.endswith('.ipynb'):
@@ -138,81 +143,78 @@ def execute(
     else:
         staging_output = output
 
-    exc = None
-    success_msg = None
-    try:
-        execute_notebook(
-            str(input),
-            str(staging_output),
-            *args,
-            nest_asyncio=nest_asyncio,  # allow papermill-in-papermill
-            cwd=cwd,
-            inject_paths=inject_paths,  # normally unused, but allow notebook to reflect on its own path
-            progress_bar=progress_bar,
-            **exec_kwargs,
-        )
-    except PapermillExecutionError as e:
-        print(f'Caught exception {e}, name {e.ename}, value {e.evalue}')
-        # Allow notebooks to short-circuit execution by raising an Exception whose message begins with the string "OK: "
-        if e.ename == 'Exception' and e.evalue.startswith(EARLY_EXIT_EXCEPTION_MSG_PREFIX):
-            success_msg = e.evalue[len(EARLY_EXIT_EXCEPTION_MSG_PREFIX):]
-            print('Run notebook %s exited early with "OK" msg: %s' % (str(input), success_msg))
-        elif e.ename == 'OK':
-            success_msg = e.evalue
-            print('Run notebook %s exited early with "OK" exception, msg: %s' % (str(input), success_msg))
-        else:
-            exc = e
-            success_msg = None
-    finally:
-        if tmp_output:
-            print(f'moving run notebook from {staging_output} to {output}')
-            move(staging_output, output)
+    with commit_ctx as commit_txn:
+        exc = None
+        success_msg = None
+        try:
+            execute_notebook(
+                str(input),
+                str(staging_output),
+                *args,
+                nest_asyncio=nest_asyncio,  # allow papermill-in-papermill
+                cwd=cwd,
+                inject_paths=inject_paths,  # normally unused, but allow notebook to reflect on its own path
+                progress_bar=progress_bar,
+                **exec_kwargs,
+            )
+        except PapermillExecutionError as e:
+            print(f'Caught exception {e}, name {e.ename}, value {e.evalue}')
+            # Allow notebooks to short-circuit execution by raising an Exception whose message begins with the string "OK: "
+            if e.ename == 'Exception' and e.evalue.startswith(EARLY_EXIT_EXCEPTION_MSG_PREFIX):
+                success_msg = e.evalue[len(EARLY_EXIT_EXCEPTION_MSG_PREFIX):]
+                print('Run notebook %s exited early with "OK" msg: %s' % (str(input), success_msg))
+            elif e.ename == 'OK':
+                success_msg = e.evalue
+                print('Run notebook %s exited early with "OK" exception, msg: %s' % (str(input), success_msg))
+            else:
+                exc = e
+                success_msg = None
+        finally:
+            if tmp_output:
+                print(f'moving run notebook from {staging_output} to {output}')
+                move(staging_output, output)
 
+
+        if commit or exc:
+            if exc:
+                msg = '\n'.join(
+                    [
+                        f'Failed: {repr(exc)}',
+                        '',
+                        ''.join(
+                            format_exception(
+                                etype=type(exc),
+                                value=exc,
+                                tb=exc.__traceback__,
+                            )
+                        ),
+                    ]
+                )
+            # Commit results:
+            # - by default, just the notebook output path
+            # - pass a list of paths to "commit" (or a single path as a str or Path) to include them in the commit
+            # - if a file named '_MSG' is written by the notebook, use its contents as the commit message
+            if commit is True:
+                commit = []
+            elif isinstance(commit, str):
+                commit = [commit]
+            elif isinstance(commit, Path):
+                commit = [str(commit)]
+            commit += [output]
+            if not msg:
+                if exists(msg_path):
+                    with open(msg_path,'r') as f:
+                        msg = f.read()
+                    remove(msg_path)
+                elif success_msg:
+                    msg = success_msg
+                else:
+                    msg = name
+
+            commit_txn.msg = msg
+            commit_txn.add = commit
 
     if commit or exc:
-        if exc:
-            msg = '\n'.join(
-                [
-                    f'Failed: {repr(exc)}',
-                    '',
-                    ''.join(
-                        format_exception(
-                            etype=type(exc),
-                            value=exc,
-                            tb=exc.__traceback__,
-                        )
-                    ),
-                ]
-            )
-        # Commit results:
-        # - by default, just the notebook output path
-        # - pass a list of paths to "commit" (or a single path as a str or Path) to include them in the commit
-        # - if a file named '_MSG' is written by the notebook, use its contents as the commit message
-        if commit is True:
-            commit = []
-        elif isinstance(commit, str):
-            commit = [commit]
-        elif isinstance(commit, Path):
-            commit = [str(commit)]
-        commit += [output]
-        if not msg:
-            if exists(msg_path):
-                with open(msg_path,'r') as f:
-                    msg = f.read()
-                remove(msg_path)
-            elif success_msg:
-                msg = success_msg
-            else:
-                msg = name
-        last_sha = git.head.sha()
-        run('git','add', commit)
-        run('git','commit','-m',msg)
-        if start_sha != last_sha:
-            repo = git.Repo()
-            tree = repo.tree().hexsha
-            head = line('git','commit-tree',tree,'-p',start_sha,'-p',last_sha,'-m',msg)
-            run('git','reset',head)
-
         if isinstance(push, str):
             pushes = [Spec(push)]
         elif isinstance(push, Iterable):

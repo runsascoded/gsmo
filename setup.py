@@ -4,7 +4,7 @@ setup(
     install_requires=[
         'papermill',
         'pyyaml',
-        'utz[setup]>=0.3.10',
+        'utz[setup]>=0.3.13',
     ],
     extras_require={
         'test': [

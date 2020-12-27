@@ -1,20 +1,19 @@
+from git import Repo
 import pytest
 
 from gsmo import gsmo
-from utz import b62, CalledProcessError, cd, contextmanager, dirname, env, exists, getcwd, git, join, lines, match, now, o, Repo, run, TemporaryDirectory
+from utz import b62, CalledProcessError, cd, contextmanager, dirname, env, exists, getcwd, git, join, lines, match, mkdir, now, o, output, run
 
 
 @contextmanager
-def example(name, ref=None):
+def example(name, ref=None, *args, **kwargs,):
     repo = Repo(search_parent_directories=True)
-    dir = join(repo.working_dir, 'example', name)
-    with TemporaryDirectory() as tmpdir:
-        wd = join(tmpdir, name)
-        run('git','clone','--recurse-submodules',dir,wd)
-        with cd(wd):
-            if ref:
-                run('git','reset','--hard',ref)
-            yield
+    gsmo_dir = repo.working_dir
+    example_dir = join(gsmo_dir, 'example', name)
+    tmp_dir = join(gsmo_dir, '.test')
+    mkdir(tmp_dir)
+    with git.clone.tmp(example_dir, *args, ref=ref, dir=tmp_dir, **kwargs) as wd:
+        yield wd
 
 
 def run_gsmo(*args, dind=False):
@@ -127,17 +126,54 @@ def get_submodule_commit(sm_path):
 
 
 def test_submodules():
-    with example('submodules', ref='c291a70'):
+    with example('submodules', ref='885b6c2') as wd:
         run_gsmo()
 
         sm_commit = get_submodule_commit('generate-random-ints')
-        lines = sm_commit.tree['out/ints.txt'].data_stream.read().decode().split('\n')
-        assert [ int(l) for l in lines if l ] == [ 6, 34, 11, 98, 52, 34, 13, 4, 48, 68, ]
+        lns = sm_commit.tree['out/ints.txt'].data_stream.read().decode().split('\n')
+        assert [ int(l) for l in lns if l ] == [ 6, 34, 11, 98, 52, 34, 13, 4, 48, 68, ]
 
         sm_commit = get_submodule_commit('sort')
-        lines = sm_commit.tree['out/ints.txt'].data_stream.read().decode().split('\n')
-        assert [ int(l) for l in lines if l ] == [ 4, 6, 11, 13, 34, 48, 52, 68, 98, ]
+        lns = sm_commit.tree['out/ints.txt'].data_stream.read().decode().split('\n')
+        assert [ int(l) for l in lns if l ] == [ 4, 6, 11, 13, 34, 48, 52, 68, 98, ]
 
+        branch = git.branch.current()
+        assert lines('git','log','--graph','--format=%d %s', 'HEAD~2..HEAD') == [
+            f'*    (HEAD -> {branch}) run',
+            r'|\  ',
+            r'| *  sort',
+            r'| *  generate-random-ints',
+            r'|/  ',
+            r'*  (origin/master, origin/HEAD, master) support recursive generate-random-ints',
+        ]
+
+        run_gsmo('-y','conf:\n  generate-random-ints:\n    n: 1,3,6')
+
+        sm_commit = get_submodule_commit('generate-random-ints')
+        lns = sm_commit.tree['out/ints.txt'].data_stream.read().decode().split('\n')
+        assert [ int(l) for l in lns if l ] == [ 6, 34, 11, 98, 52, 34, 13, 4, 48, 68, ]
+
+        sm_commit = get_submodule_commit('sort')
+        lns = sm_commit.tree['out/ints.txt'].data_stream.read().decode().split('\n')
+        assert [ int(l) for l in lns if l ] == [ 4, 6, 11, 13, 34, 48, 52, 68, 98, ]
+
+        assert lines('git','log','--graph','--format=%d %s', 'HEAD~3..HEAD') == [
+            f'*    (HEAD -> {branch}) run',
+            r'|\  ',
+            r'| *  sort',
+            r'| *  generate-random-ints',
+            r'|/| ',
+            r'| *  generate random ints 2 of 3 (6)',
+            r'| *  generate random ints 1 of 3 (3)',
+            r'| *  generate random ints 0 of 3 (1)',
+            r'|/  ',
+            r'*    run',
+            r'|\  ',
+            r'| *  sort',
+            r'| *  generate-random-ints',
+            r'|/  ',
+            r'*  (origin/master, origin/HEAD, master) support recursive generate-random-ints',
+        ]
 
 def test_clone_local():
     cwd = getcwd()
