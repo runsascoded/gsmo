@@ -39,6 +39,11 @@ def test_spec():
     check(('origin','aaa',''), ('origin', 'aaa:'), 'origin/aaa:')
     check(('origin','aaa',None), ('origin', 'aaa:'), 'origin/aaa:')
 
+    check((r'git@github.com:org\/repo/aaa:bbb',), ('git@github.com:org/repo', 'aaa:bbb'), r'git@github.com:org\/repo/aaa:bbb')
+    check((r'git@github.com:org\/repo/aaa:',), ('git@github.com:org/repo', 'aaa:'), r'git@github.com:org\/repo/aaa:')
+    check((r'git@github.com:org\/repo/:bbb',), ('git@github.com:org/repo', ':bbb'), r'git@github.com:org\/repo/:bbb')
+    check((r'git@github.com:org\/repo',), ('git@github.com:org/repo',), r'git@github.com:org\/repo')
+
     for args in (
         ('origin/aaa:!',),
         ('origin','aaa:!',),

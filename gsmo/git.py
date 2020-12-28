@@ -1,4 +1,4 @@
-from re import fullmatch
+from utz.escape import split, join
 
 
 def w(name, ch=r'\w'):
@@ -16,6 +16,7 @@ GIT_HTTP_URL_REGEX = '(?:https?://)?%s(?::%s)?:%s(?:@%s)?' % (domain_rgx, port_r
 
 
 class Idem(type):
+    '''Metaclass that intercepts 1-arg construction with an existing class instance and returns that instance'''
     def __call__(cls, *args, **kwargs):
         if len(args) == 1 and isinstance(args[0], Spec):
             return args[0]
@@ -31,14 +32,14 @@ class Spec(metaclass=Idem):
     '''Wrap a Git refspec ("<remote>/<src>:<dst>"; <src>/<dst> optional) for use with `git push`, providing str and
     tuple converters and extra syntax for configuring post-push working-tree syncing.
 
-    Notably, a trailing "!" signals a `git push` target whose working tree should be additionally made to match the
-    <dst> ref (e.g. by `push`ing <src> to a temporary branch on <remote>, then `cd`'ing (or `ssh`'ing) into <remote> and
-    merging that temporary placeholder branch into <dst>).
+    Some notes:
+    - <remote> should have any (forward) slashes backslash-escaped (see. `utz.escape`); the first unescaped slash is
+      taken to signal the end of `<remote>` and beginning of `<src>:<dst>`. Slashes *don't* need to be escaped in <src>
+      or <dst>.
+    - A trailing "!" signals a `git push` target whose working tree should be additionally made to match the <dst> ref
+      (e.g. by `push`ing <src> to a temporary branch on <remote>, then `cd`'ing (or `ssh`'ing) into <remote> and merging
+      that temporary placeholder branch into <dst>).
     '''
-    PULL_REGEX = '(?P<pull>\!)?'
-    SRC_DST_REGEX = '(?P<src>[^:]*?)(?::(?P<dst>.*?))?'
-    SPEC_REGEX = f'{SRC_DST_REGEX}{PULL_REGEX}'
-    FULL_REGEX = f'(?P<remote>[^/]+?)(?:/{SRC_DST_REGEX})?{PULL_REGEX}'
 
     def _parse_spec(self, spec, full):
         self.pull = False
@@ -48,20 +49,27 @@ class Spec(metaclass=Idem):
                 self.remote = None
             return
         if full:
-            regex = self.FULL_REGEX
-        else:
-            regex = self.SPEC_REGEX
-        if not (m := fullmatch(regex, spec)):
-            raise ValueError(f'Invalid spec: {spec}')
-        if full:
-            self.remote = m['remote']
-        self.src = m['src'] or None  # '' ⟶ None
-        if m['dst'] is None:
-            self.dst = self.src
-        else:
-            self.dst = m['dst'] or None  # '' ⟶ None
-        if m['pull']:
-            self.pull = True
+            [self.remote, *pcs] = split(spec, '/', max=1)
+            if pcs:
+                [spec] = pcs
+            else:
+                spec = None
+                if self.remote.endswith('!'):
+                    self.pull = True
+                    self.remote = self.remote[:-1]
+        if spec:
+            pcs = spec.split(':')
+            if pcs[-1].endswith('!'):
+                self.pull = True
+                pcs[-1] = pcs[-1][:-1]
+
+            self.src = pcs[0] or None
+            if len(pcs) == 2:
+                self.dst = pcs[1] or None
+            elif len(pcs) == 1:
+                self.dst = self.src
+            else:
+                raise ValueError(f'Invalid spec: {spec}')
 
     def __init__(self, *args):
         self.remote = None
@@ -98,11 +106,8 @@ class Spec(metaclass=Idem):
         if not tpl:
             assert not self.pull
             return ''
-        if len(tpl) == 2:
-            s = f'{tpl[0]}/{tpl[1]}'
-        elif len(tpl) == 1:
-            (remote,) = tpl
-            s = remote
+        if len(tpl) <= 2:
+            s = join(tpl, '/', max=1)
         else:
             raise RuntimeError(f'Invalid spec tuple: {tpl}')
         if self.pull:
