@@ -1,8 +1,9 @@
 from git import Repo
+import json
 import pytest
 
 from gsmo import gsmo
-from utz import b62, CalledProcessError, cd, contextmanager, dirname, env, exists, getcwd, git, join, lines, match, mkdir, now, o, output, run
+from utz import b62, CalledProcessError, cd, contextmanager, dirname, env, exists, getcwd, git, join, lines, match, mkdir, now, o, run
 
 
 @contextmanager
@@ -36,7 +37,6 @@ def test_dind():
     with example('dind',ref='c60d0fa'):
         run_gsmo('-x','docker-hello-world.ipynb', dind=True)
         with open('nbs/docker-hello-world.ipynb','r') as f:
-            import json
             nb = json.load(f)
         cells = nb['cells']
         assert len(cells) == 6
