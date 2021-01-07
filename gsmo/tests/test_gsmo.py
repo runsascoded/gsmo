@@ -99,7 +99,7 @@ def test_hailstone():
 
 
 def test_factors():
-    with example('factors', ref='876c95c'):
+    with example('factors', ref='7a6a79d'):
         run_gsmo()
         tree = Repo().commit().tree
         assert tree['graph.png'].hexsha == '1ed114e1dd88d516ca749e516d24ef1d28fdb0de'
