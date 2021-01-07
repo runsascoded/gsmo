@@ -5,8 +5,7 @@ from utz.docker.dsl import *
 
 from ..config import GH_REPO, GSMO_DIR, IMAGE_HOME
 
-from utz.setup import Compute
-VERSION_TAG_REGEX = Compute.VERSION_TAG_REGEX
+from utz.version import VERSION_TAG_REGEX
 
 
 def build(
@@ -116,7 +115,7 @@ def build(
         NOTE('Simple .bashrc for anonymous users that just sources /root/.bashrc')
         COPY('home/.bashrc',f'{IMAGE_HOME}/.bashrc')
         LN()
-        RUN('pip install --upgrade --no-cache utz[setup]==0.3.16')
+        RUN('pip install --upgrade --no-cache utz[setup]==0.3.17')
         LN()
         ENTRYPOINT("gsmo-entrypoint", "/src")
 

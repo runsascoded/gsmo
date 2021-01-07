@@ -9,3 +9,7 @@ def OK(msg, throw=True):
         raise exc
     else:
         return exc
+
+
+from .config import version
+__version__ = version

@@ -6,8 +6,8 @@ from utz.process import line
 from sys import stderr
 
 from .err import OK, RAISE, WARN
-from .version import get_version
-version = get_version()
+from utz.version import pkg_version
+version = pkg_version('gsmo')
 
 DEFAULT_IMAGE_REPO = 'runsascoded/gsmo'
 DEFAULT_IMAGE = f'{DEFAULT_IMAGE_REPO}:{version}'
