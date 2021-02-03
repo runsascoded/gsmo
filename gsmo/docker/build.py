@@ -198,7 +198,7 @@ def main():
     parser.add_argument('-c','--copy',action='store_true',help='Copy current gsmo Git clone into Docker image (instead of cloning from GitHub)')
     parser.add_argument('-D','--no-dind',action='store_true',help='Skip building docker-in-docker (DinD) images')
     parser.add_argument('-l','--latest',action='store_true',help='Only create "latest" tag. By default, a tag for the python version is also created, as well as for the current Git commit (if there are no uncommitted changes)')
-    parser.add_argument('-p','--python-version',default='3.8.6',help='Python version to build base image against')
+    parser.add_argument('-p','--python-version',default='3.9.1',help='Python version to build base image against')
     parser.add_argument('-P','--push',action='store_true',help='Push built images')
     parser.add_argument('-r','--ref',action='append',help='Ref-name(s) to include as tags of the built image (default: current tags and branches)')
     parser.add_argument('-t','--token',action='append',help='Token to log in to Docker Hub with (or multiple arguments of the form "<repository>=<token>")')
