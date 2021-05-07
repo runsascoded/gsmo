@@ -647,15 +647,26 @@ def main(*args):
             #  won't have the run_config path mounted in, and the current follow-on run can't add a new mount; maybe
             #  serialize run_configs to string YAML in this case, and pass them in on CLI? or write them to a run_config
             #  path that is mounted in (perhaps inside a .gsmo dir?)
-            RUN_CONFIG_YML_PATH = '/run_config.yml'
+            RUN_CONFIG_YML_NAME = 'run_config.yml'
+            RUN_CONFIG_YML_PATH = '/%s' % RUN_CONFIG_YML_NAME
             if run_config:
-                run_config_file = NamedTemporaryFile(dir=env.get('GSMO_DIR'), suffix='.yml', delete=False)
-                run_config_path = run_config_file.name
+                run_config_dir = env.get('GSMO_DIR')
+                if run_config_dir:
+                    run_config_dir = join(run_config_dir, '.gsmo')
+                    run_config_dst = RUN_CONFIG_YML_PATH
+                    print('Run config in GSMO_DIR: %s, mounting to %s' % (run_config_dir, run_config_dst))
+                else:
+                    run_config_dir = '.gsmo'
+                    run_config_dst = join(DEFAULT_SRC_MOUNT_DIR, '.gsmo', RUN_CONFIG_YML_NAME)
+                    print('Run config in .gsmo: %s, mounting to %s' % (run_config_dir, run_config_dst))
+                run_config_path = join(run_config_dir, RUN_CONFIG_YML_NAME)
+                mnt = dind_mnt(run_config_path, run_config_dst)
+                mounts += mnt
+                cmd_args += [ '-Y', run_config_dst ]
+                mkdir(run_config_dir)
                 print(f'Writing run config to {run_config_path} (gsmo dir: {gsmo_dir})')
                 with open(run_config_path,'w') as f:
                     yaml.safe_dump(dict(run_config), f, sort_keys=False)
-                mounts += dind_mnt(run_config_path, RUN_CONFIG_YML_PATH)
-                cmd_args += [ '-Y',RUN_CONFIG_YML_PATH ]
             else:
                 print('no run config')
         else:

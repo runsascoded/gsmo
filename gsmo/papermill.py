@@ -174,7 +174,6 @@ def execute(
                 print(f'moving run notebook from {staging_output} to {output}')
                 move(staging_output, output)
 
-
         if commit or exc:
             if exc:
                 msg = '\n'.join(
@@ -212,7 +211,11 @@ def execute(
                     msg = name
 
             commit_txn.msg = msg
-            commit_txn.add = commit
+            if exc:
+                # TODO: test committing failed run when not all expected output files exist
+                commit_txn.add = [ f for f in commit if exists(f) ]
+            else:
+                commit_txn.add = commit
 
     if commit or exc:
         if isinstance(push, str):
