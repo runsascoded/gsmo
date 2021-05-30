@@ -527,7 +527,7 @@ def main(*args):
                 if exists(reqs_txt) and not skip_requirements_txt:
                     with open(reqs_txt, 'r') as f:
                         pips += [
-                            f'"{dep}"'
+                            dep
                             for line in f.readlines()
                             if (dep := line.rstrip('\n'))
                         ]
@@ -535,7 +535,7 @@ def main(*args):
                 if pips:
                     if use_docker:
                         build_image = True
-                        RUN('pip install "%s"' % "\" \"".join(pips))
+                        RUN('pip install "%s"' % '" "'.join(pips))
                     else:
                         import pip
                         print('pip install "%s"' % "\" \"".join(pips))
