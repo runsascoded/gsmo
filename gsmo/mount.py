@@ -29,7 +29,7 @@ class Mount:
             dst = join(dst, basename(src))
         if not exists(src):
             if not keep_missing:
-                msg = f"Mount src doesn't exist: {src}"
+                msg = f"Mount src doesn't exist: {src} (dst: {dst})"
                 if err == RAISE:
                     raise ValueError(msg)
                 if err == WARN:

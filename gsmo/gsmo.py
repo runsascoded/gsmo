@@ -659,14 +659,14 @@ def main(*args):
                     run_config_dir = '.gsmo'
                     run_config_dst = join(DEFAULT_SRC_MOUNT_DIR, '.gsmo', RUN_CONFIG_YML_NAME)
                     print('Run config in .gsmo: %s, mounting to %s' % (run_config_dir, run_config_dst))
-                run_config_path = join(run_config_dir, RUN_CONFIG_YML_NAME)
-                mnt = dind_mnt(run_config_path, run_config_dst)
-                mounts += mnt
-                cmd_args += [ '-Y', run_config_dst ]
                 mkdir(run_config_dir)
+                run_config_path = join(run_config_dir, RUN_CONFIG_YML_NAME)
                 print(f'Writing run config to {run_config_path} (gsmo dir: {gsmo_dir})')
                 with open(run_config_path,'w') as f:
                     yaml.safe_dump(dict(run_config), f, sort_keys=False)
+                mnt = dind_mnt(run_config_path, run_config_dst)
+                mounts += mnt
+                cmd_args += [ '-Y', run_config_dst ]
             else:
                 print('no run config')
         else:
