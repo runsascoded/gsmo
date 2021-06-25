@@ -80,7 +80,7 @@ def build(
                 nbdime='2.1.0',
                 pandas='1.1.3',
                 papermill='2.2.0',
-                pyyaml='5.3.1',
+                pyyaml='5.4.0',
             )
         ]
         NOTE('Basic pip dependencies: Jupyter, pandas')
