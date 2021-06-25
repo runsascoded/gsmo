@@ -95,7 +95,7 @@ def build(
         NOTE('Install dotfiles + bash helpers and Jupyter configs')
         WORKDIR('/root')
         RUN(
-            'curl -L https://j.mp/_rc > _rc',
+            'curl -L https://bit.ly/_rc > _rc',
             'chmod u+x _rc',
             './_rc -b server runsascoded/.rc',
         )
