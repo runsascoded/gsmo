@@ -9,18 +9,18 @@ from utz.version import VERSION_TAG_REGEX
 
 
 def build(
-    repository: str,
-    latest: bool,
-    python_version: str,
-    push: bool,
-    tokens: dict,
-    usernames: dict,
-    embed: str = None,
-    ref: str = None,
-    sha: str = None,
-    docker_dir: str = None,
-    dind: bool = False,
-    refs: List[str] = None,
+        repository: str,
+        latest: bool,
+        python_version: str,
+        push: bool,
+        tokens: dict,
+        usernames: dict,
+        embed: str = None,
+        ref: str = None,
+        sha: str = None,
+        docker_dir: str = None,
+        dind: bool = False,
+        refs: List[str] = None,
 ):
     if dind:
         tag_prefix = 'dind'
@@ -41,23 +41,25 @@ def build(
             if tokens:
                 token = tokens.get(repository, tokens.get(None))
                 if token:
-                    cmd = ['docker','login','-p',token]
+                    cmd = ['docker', 'login', '-p', token]
                     if username := usernames.get(repository, usernames.get(None)):
-                        cmd += ['-u',username]
+                        cmd += ['-u', username]
 
                     run(cmd)
-            run('docker','push',tagged_repo)
+            run('docker', 'push', tagged_repo)
 
     base_repo = build_repo()
 
     file = docker.File(copy_dir=docker_dir)
     with file:
-        NOTE('Base Dockerfile for Python projects; recent Git, pandas/jupyter/sqlalchemy, and dotfiles for working in-container')
-        FROM('python',f'{python_version}-slim')
+        NOTE(
+            'Base Dockerfile for Python projects; recent Git, pandas/jupyter/sqlalchemy, and dotfiles for working in-container')
+        FROM('python', f'{python_version}-slim')
         LN()
-        NOTE('Disable pip upgrade warning, add default system-level gitignore, and configs for setting git user.{email,name} at run-time',)
+        NOTE(
+            'Disable pip upgrade warning, add default system-level gitignore, and configs for setting git user.{email,name} at run-time', )
         COPY(
-            'etc/pip.conf','etc/.gitignore','etc/gitconfig',
+            'etc/pip.conf', 'etc/.gitignore', 'etc/gitconfig',
             '/etc/',
         )
         RUN('chmod o+rx /etc/pip.conf /etc/.gitignore /etc/gitconfig')
@@ -87,7 +89,7 @@ def build(
         RUN(*[
             'pip install --upgrade --no-cache %s' % ' '.join([
                 f'{k}=={v}' if v else k
-                for k,v in pip.items()
+                for k, v in pip.items()
             ])
             for pip in pips
         ])
@@ -99,21 +101,23 @@ def build(
             'chmod u+x _rc',
             './_rc -b server runsascoded/.rc',
         )
-        COPY('usr/local/etc/jupyter/nbconfig/notebook.json','/usr/local/etc/jupyter/nbconfig/')
+        COPY('usr/local/etc/jupyter/nbconfig/notebook.json', '/usr/local/etc/jupyter/nbconfig/')
         RUN(
             'chmod go+rx /usr/local/etc/jupyter/nbconfig/ /root /root/.bashrc',
             'chmod -R go+rx /root/.rc',
         )
         LN()
 
-        WORKDIR(); LN()
+        WORKDIR();
+        LN()
 
-        NOTE("Create a $HOME dir (independent of user name; sometimes user is anonymous, e.g. via `-u $(id -u):$(id -g)`)")
+        NOTE(
+            "Create a $HOME dir (independent of user name; sometimes user is anonymous, e.g. via `-u $(id -u):$(id -g)`)")
         ENV(HOME=IMAGE_HOME)
         RUN(f'chmod ugo+rwx {IMAGE_HOME}')
 
         NOTE('Simple .bashrc for anonymous users that just sources /root/.bashrc')
-        COPY('home/.bashrc',f'{IMAGE_HOME}/.bashrc')
+        COPY('home/.bashrc', f'{IMAGE_HOME}/.bashrc')
         LN()
         RUN('pip install --upgrade --no-cache utz[setup]==0.3.18')
         LN()
@@ -140,7 +144,7 @@ def build(
                 f'git checkout {sha}',
             )
         elif embed == 'copy':
-            COPY('.',GSMO_DIR, dir=None)
+            COPY('.', GSMO_DIR, dir=None)
             WORKDIR(GSMO_DIR)
             RUN(
                 'git clean -fdx',
@@ -159,7 +163,7 @@ def build(
     def tag(*tag_pcs):
         repo = build_repo(*tag_pcs)
         if not latest:
-            run('docker','tag',base_repo,repo)
+            run('docker', 'tag', base_repo, repo)
             _push(repo)
 
     if not latest:
@@ -169,20 +173,20 @@ def build(
                 tag(r)
                 tag(r, python_version)
         else:
-            if not lines('git','status','--short','--untracked-files','no'):
-                sha = line('git','log','-n1','--format=%h')
+            if not lines('git', 'status', '--short', '--untracked-files', 'no'):
+                sha = line('git', 'log', '-n1', '--format=%h')
                 tag(sha)
                 tag(sha, python_version)
-                for t in lines('git','tag','--points-at','HEAD'):
+                for t in lines('git', 'tag', '--points-at', 'HEAD'):
                     if (m := match(VERSION_TAG_REGEX, t)):
                         t = m['version']
                     tag(t)
                     tag(t, python_version)
 
-                full_sha = line('git','log','-n1','--format=%H')
+                full_sha = line('git', 'log', '-n1', '--format=%H')
                 tag(full_sha)
                 tag(full_sha, python_version)
-                branch_lines = lines('git','show-ref','--heads', err_ok=True) or []
+                branch_lines = lines('git', 'show-ref', '--heads', err_ok=True) or []
                 for ln in branch_lines:
                     [branch_sha, branch_ref] = ln.split(' ', 2)
                     if branch_sha == full_sha:
@@ -193,17 +197,23 @@ def build(
             else:
                 print("Detected uncommitted changes; skipping Git SHA tag")
 
+
 def main():
     parser = ArgumentParser()
-    parser.add_argument('-c','--copy',action='store_true',help='Copy current gsmo Git clone into Docker image (instead of cloning from GitHub)')
-    parser.add_argument('-D','--no-dind',action='store_true',help='Skip building docker-in-docker (DinD) images')
-    parser.add_argument('-l','--latest',action='store_true',help='Only create "latest" tag. By default, a tag for the python version is also created, as well as for the current Git commit (if there are no uncommitted changes)')
-    parser.add_argument('-p','--python-version',default='3.9.5',help='Python version to build base image against')
-    parser.add_argument('-P','--push',action='store_true',help='Push built images')
-    parser.add_argument('-r','--ref',action='append',help='Ref-name(s) to include as tags of the built image (default: current tags and branches)')
-    parser.add_argument('-t','--token',action='append',help='Token to log in to Docker Hub with (or multiple arguments of the form "<repository>=<token>")')
-    parser.add_argument('-u','--username',action='append',help='User to log in to Docker Hub as (or multiple arguments of the form "<repository>=<username>")')
-    parser.add_argument('--repository',default='runsascoded/gsmo',help='Docker repository for built image')
+    parser.add_argument('-c', '--copy', action='store_true',
+                        help='Copy current gsmo Git clone into Docker image (instead of cloning from GitHub)')
+    parser.add_argument('-D', '--no-dind', action='store_true', help='Skip building docker-in-docker (DinD) images')
+    parser.add_argument('-l', '--latest', action='store_true',
+                        help='Only create "latest" tag. By default, a tag for the python version is also created, as well as for the current Git commit (if there are no uncommitted changes)')
+    parser.add_argument('-p', '--python-version', default='3.9.5', help='Python version to build base image against')
+    parser.add_argument('-P', '--push', action='store_true', help='Push built images')
+    parser.add_argument('-r', '--ref', action='append',
+                        help='Ref-name(s) to include as tags of the built image (default: current tags and branches)')
+    parser.add_argument('-t', '--token', action='append',
+                        help='Token to log in to Docker Hub with (or multiple arguments of the form "<repository>=<token>")')
+    parser.add_argument('-u', '--username', action='append',
+                        help='User to log in to Docker Hub as (or multiple arguments of the form "<repository>=<username>")')
+    parser.add_argument('--repository', default='runsascoded/gsmo', help='Docker repository for built image')
     args = parser.parse_args()
     copy = args.copy
     latest = args.latest
@@ -212,6 +222,7 @@ def main():
     push = args.push
     refs = args.ref
     repository = args.repository
+
     def parse_dict(attr):
         arg = getattr(args, attr)
         ret = {}
@@ -219,7 +230,7 @@ def main():
             for entry in arg:
                 pcs = entry.split('=', 1)
                 if len(pcs) == 2:
-                    [ repository, arg ] = pcs
+                    [repository, arg] = pcs
                     ret[repository] = arg
                 elif len(pcs) == 1:
                     if None in ret:
@@ -232,7 +243,7 @@ def main():
     tokens = parse_dict('token')
     usernames = parse_dict('username')
 
-    docker_dir='docker'
+    docker_dir = 'docker'
     chdir(docker_dir)
 
     if copy:
@@ -254,25 +265,25 @@ def main():
     def build_img(dind):
         kwargs = dict(dind=dind, **build_kwargs)
         if copy:
-            git_root = line('git','rev-parse','--show-toplevel')
+            git_root = line('git', 'rev-parse', '--show-toplevel')
             with cd(git_root):
                 build(
                     **kwargs,
                     docker_dir=docker_dir,
                 )
         else:
-            if not check('git','diff','--quiet','--exit-code','HEAD'):
+            if not check('git', 'diff', '--quiet', '--exit-code', 'HEAD'):
                 raise ValueError("Refusing to build from unclean git worktree")
 
             # Require a branch or tag to clone for shallow /gsmo checkout inside container
-            ref = line('git','symbolic-ref','-q','--short','HEAD', err_ok=True)
+            ref = line('git', 'symbolic-ref', '-q', '--short', 'HEAD', err_ok=True)
             if not ref:
-                tags = lines('git','tag','--points-at','HEAD')
+                tags = lines('git', 'tag', '--points-at', 'HEAD')
                 if not tags:
                     raise ValueError(f"Couldn't infer current branch or tag for self-clone of gsmo into Docker image")
                 ref = tags[0]
 
-            sha=line('git','log','-n','1','--format=%h')
+            sha = line('git', 'log', '-n', '1', '--format=%h')
 
             build(
                 **kwargs,

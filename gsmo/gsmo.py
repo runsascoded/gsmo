@@ -4,67 +4,98 @@ from utz import *
 from utz.docker.dsl import *
 
 from .cli import Arg, run_args, load_run_config
-from .config import clean_group, lists, version, Config, DEFAULT_IMAGE_REPO, DEFAULT_SRC_DIR_NAME, DEFAULT_SRC_MOUNT_DIR, DEFAULT_RUN_NB, IMAGE_HOME, DEFAULT_GROUP, DEFAULT_USER, DEFAULT_IMAGE, DEFAULT_DIND_IMAGE, GSMO_DIR, GSMO_DIR_NAME
+from .config import clean_group, lists, version, Config, DEFAULT_IMAGE_REPO, DEFAULT_SRC_DIR_NAME, \
+    DEFAULT_SRC_MOUNT_DIR, DEFAULT_RUN_NB, IMAGE_HOME, DEFAULT_GROUP, DEFAULT_USER, DEFAULT_IMAGE, DEFAULT_DIND_IMAGE, \
+    GSMO_DIR, GSMO_DIR_NAME
 from .err import OK, RAISE, WARN
 from .git import GIT_HTTP_URL_REGEX, GIT_SSH_URL_REGEX
 from .mount import Mount, Mounts
 
+
 def main(*args):
     parser = ArgumentParser()
-    parser.add_argument('input',nargs='?',help='Input directory containing run.ipynb (and optionally gsmo.yml, or other path specified by "-y"); defaults to current directory')
+    parser.add_argument('input', nargs='?',
+                        help='Input directory containing run.ipynb (and optionally gsmo.yml, or other path specified by "-y"); defaults to current directory')
 
     jupyter_args = [
-        Arg('-d','--detach',default=None,action='store_true',help="When booting into Jupyter server mode, detach the container"),
-        Arg('-D','--no-docker',dest='docker',default=True,action='store_false',help="Run in the current shell instead of in Docker"),
-        Arg('-O','--no-open',default=None,action='store_true',help='Skip opening Jupyter notebook server in browser'),
-        Arg('-s','--shell',default=None,action='store_true',help="Open a /bin/bash shell in the container (instead of running a jupyter server)"),  # TODO: implement
-        Arg('--dir',help='Root dir for jupyter notebook server (default: --dst / `/src`'),
+        Arg('-d', '--detach', default=None, action='store_true',
+            help="When booting into Jupyter server mode, detach the container"),
+        Arg('-D', '--no-docker', dest='docker', default=True, action='store_false',
+            help="Run in the current shell instead of in Docker"),
+        Arg('-O', '--no-open', default=None, action='store_true',
+            help='Skip opening Jupyter notebook server in browser'),
+        Arg('-s', '--shell', default=None, action='store_true',
+            help="Open a /bin/bash shell in the container (instead of running a jupyter server)"),  # TODO: implement
+        Arg('--dir', help='Root dir for jupyter notebook server (default: --dst / `/src`'),
     ]
 
     docker_args = [
-        Arg('-a','--apt',help='Comma-separated list of packages to apt-get install'),
-        Arg('-b','--build-arg',action='append',help='Comma-separated list of packages to apt-get install'),
-        Arg('--ctx',help='Host path to mount as "/src" (cf. `--dst`); defaults to the current directory, but can be set to e.g. ".." to mount in the parent directory (e.g. ensuring a submodule\'s context is available)'),
-        Arg('--dev',default=None,action='store_true',help="Run in dev mode: use a 'latest' Docker image tag (':latest' or ':dind') and mount this gsmo directory into the Docker image (as /gsmo)"),
-        Arg('--dind',default=None,action='store_true',help="When set, mount /var/run/docker.sock in container (and default to a base image that contains docker installed)"),
-        Arg('--dst',help='Path inside Docker container to mount current directory/repo to (default: /src)'),
-        Arg('-e','--env','--image-env',action='append',help='Environment variables to set in Docker image (at build time)'),
-        Arg('--env-file','--ef','--image-env-file',action='append',help='Files containing environment variables to set in Docker image (at build time)'),
-        Arg('-E','--container-env',action='append',help='Environment variables to pass to Docker container (at run time)'),
-        Arg('--container-env-file','--Ef',action='append',help='Files containing environment variables to pass to Docker container (at run time)'),
-        Arg('-i','--image',help=f'Base docker image to build on (default: f{DEFAULT_IMAGE})'),
-        Arg('--id',help='Comma-delimited subset of {user,group,root,sudo} (or {u,g,r,s}); short-hand for --image-user, --image-group, --root, and --sudo, resp.'),
-        Arg('--force-local',default=None,action='store_true',help="Interpret <input> as a local directory"),
-        Arg('--force-remote',default=None,action='store_true',help="Interpret <input> as a remote Git repo URL"),
-        Arg('-I','--no-interactive',default=None,action='store_true',help="Don't run interactively / allocate a TTY (i.e. skip `-it` flags to `docker run`)"),
-        Arg('-g','--image-group',help='Create a group with this name inside the Docker image (with same GID as the current host-machine group; empty string implies using the current host-machine group name)'),
-        Arg('-G','--group',action='append',help="Additional groups to add docker image user to"),
-        Arg('-l','--label',action='append',help='Labels to apply to run container, in k=v format'),
-        Arg('-L','--label-file',help='File with labels to apply to run container, in k=v format'),
-        Arg('-M','--missing-paths',default=0,action='count',help='Relax checking of paths (for propagating mounts and groups into Docker): 1x ⟹ warn, 2x ⟹ ignore'),
-        Arg('-n','--dry-run',action='count',default=0,help="Prepare and print run cmd (including building Docker image), but don't execute it. If passed twice, stop before building Docker image"),
-        Arg('--name',help='Container name (defaults to directory basename)'),
-        Arg('-p','--pip',help='Comma-separated (or multi-arg) list of packages to pip install'),
-        Arg('--container-pip','--pie','--pip-e',action='append',help='When running the container, `pip install -e` a directory or directories (especially subdirectories of the project being run, which are mounted into the container and are not available for `pip install`ing at image-build time) before running the usual entrypoint script'),
-        Arg('-P','--port',action='append',help='Ports (or ranges) to expose from the container (if Jupyter server is being run, the first port in the first provided range will be used); can be passed multiple times and/or as comma-delimited lists'),
-        Arg('--rm','--remove-container',default=None,action='store_true',help="Remove Docker container after run (pass `--rm` to `docker run`)"),
-        Arg('-R','--skip-requirements-txt',default=None,action='store_true',help="Skip {reading,`pip install`ing} any requirements.txt that is present"),
-        Arg('--sudo',default=None,action='store_true',help="Ensure Docker image user has sudo privileges"),
-        Arg('-t','--tag',help='Comma-separated (or multi-arg) list of tags to add to built docker image'),
-        Arg('-u','--image-user',help='Create a user with this name inside the Docker image (with same UID as the current host-machine user; empty string implies using the current host-machine user name)'),
-        Arg('-U','--root','--no-user',default=None,action='store_true',help="Run docker as root (instead of as the current system user)"),
-        Arg('-v','--mount',action='append',help='Paths to mount into Docker container; relative paths are accepted, and the destination can be omitted if it matches the src (relative to the current directory, e.g. "home" → "/home")'),
+        Arg('-a', '--apt', help='Comma-separated list of packages to apt-get install'),
+        Arg('-b', '--build-arg', action='append', help='Comma-separated list of packages to apt-get install'),
+        Arg('--ctx',
+            help='Host path to mount as "/src" (cf. `--dst`); defaults to the current directory, but can be set to e.g. ".." to mount in the parent directory (e.g. ensuring a submodule\'s context is available)'),
+        Arg('--dev', default=None, action='store_true',
+            help="Run in dev mode: use a 'latest' Docker image tag (':latest' or ':dind') and mount this gsmo directory into the Docker image (as /gsmo)"),
+        Arg('--dind', default=None, action='store_true',
+            help="When set, mount /var/run/docker.sock in container (and default to a base image that contains docker installed)"),
+        Arg('--dst', help='Path inside Docker container to mount current directory/repo to (default: /src)'),
+        Arg('-e', '--env', '--image-env', action='append',
+            help='Environment variables to set in Docker image (at build time)'),
+        Arg('--env-file', '--ef', '--image-env-file', action='append',
+            help='Files containing environment variables to set in Docker image (at build time)'),
+        Arg('-E', '--container-env', action='append',
+            help='Environment variables to pass to Docker container (at run time)'),
+        Arg('--container-env-file', '--Ef', action='append',
+            help='Files containing environment variables to pass to Docker container (at run time)'),
+        Arg('-i', '--image', help=f'Base docker image to build on (default: f{DEFAULT_IMAGE})'),
+        Arg('--id',
+            help='Comma-delimited subset of {user,group,root,sudo} (or {u,g,r,s}); short-hand for --image-user, --image-group, --root, and --sudo, resp.'),
+        Arg('--force-local', default=None, action='store_true', help="Interpret <input> as a local directory"),
+        Arg('--force-remote', default=None, action='store_true', help="Interpret <input> as a remote Git repo URL"),
+        Arg('-I', '--no-interactive', default=None, action='store_true',
+            help="Don't run interactively / allocate a TTY (i.e. skip `-it` flags to `docker run`)"),
+        Arg('-g', '--image-group',
+            help='Create a group with this name inside the Docker image (with same GID as the current host-machine group; empty string implies using the current host-machine group name)'),
+        Arg('-G', '--group', action='append', help="Additional groups to add docker image user to"),
+        Arg('-l', '--label', action='append', help='Labels to apply to run container, in k=v format'),
+        Arg('-L', '--label-file', help='File with labels to apply to run container, in k=v format'),
+        Arg('-M', '--missing-paths', default=0, action='count',
+            help='Relax checking of paths (for propagating mounts and groups into Docker): 1x ⟹ warn, 2x ⟹ ignore'),
+        Arg('-n', '--dry-run', action='count', default=0,
+            help="Prepare and print run cmd (including building Docker image), but don't execute it. If passed twice, stop before building Docker image"),
+        Arg('--name', help='Container name (defaults to directory basename)'),
+        Arg('-p', '--pip', help='Comma-separated (or multi-arg) list of packages to pip install'),
+        Arg('--container-pip', '--pie', '--pip-e', action='append',
+            help='When running the container, `pip install -e` a directory or directories (especially subdirectories of the project being run, which are mounted into the container and are not available for `pip install`ing at image-build time) before running the usual entrypoint script'),
+        Arg('-P', '--port', action='append',
+            help='Ports (or ranges) to expose from the container (if Jupyter server is being run, the first port in the first provided range will be used); can be passed multiple times and/or as comma-delimited lists'),
+        Arg('--rm', '--remove-container', default=None, action='store_true',
+            help="Remove Docker container after run (pass `--rm` to `docker run`)"),
+        Arg('-R', '--skip-requirements-txt', default=None, action='store_true',
+            help="Skip {reading,`pip install`ing} any requirements.txt that is present"),
+        Arg('--sudo', default=None, action='store_true', help="Ensure Docker image user has sudo privileges"),
+        Arg('-t', '--tag', help='Comma-separated (or multi-arg) list of tags to add to built docker image'),
+        Arg('-u', '--image-user',
+            help='Create a user with this name inside the Docker image (with same UID as the current host-machine user; empty string implies using the current host-machine user name)'),
+        Arg('-U', '--root', '--no-user', default=None, action='store_true',
+            help="Run docker as root (instead of as the current system user)"),
+        Arg('-v', '--mount', action='append',
+            help='Paths to mount into Docker container; relative paths are accepted, and the destination can be omitted if it matches the src (relative to the current directory, e.g. "home" → "/home")'),
     ]
 
     subparsers = parser.add_subparsers()
 
-    jupyter_parser = subparsers.add_parser('jupyter', help='Boot (and attempt to open in browser) a Jupyter server running in a Docker image built for this module', aliases=['j'])
+    jupyter_parser = subparsers.add_parser('jupyter',
+                                           help='Boot (and attempt to open in browser) a Jupyter server running in a Docker image built for this module',
+                                           aliases=['j'])
     jupyter_parser.set_defaults(cmd='jupyter')
 
-    run_parser = subparsers.add_parser('run', help='Run this module in a purpose-built Docker image', aliases=['r','nb'])
+    run_parser = subparsers.add_parser('run', help='Run this module in a purpose-built Docker image',
+                                       aliases=['r', 'nb'])
     run_parser.set_defaults(cmd='run')
 
-    shell_parser = subparsers.add_parser('shell', help='Boot a Bash shell in a Docker image built for this module', aliases=['sh','s','bash'])
+    shell_parser = subparsers.add_parser('shell', help='Boot a Bash shell in a Docker image built for this module',
+                                         aliases=['sh', 's', 'bash'])
     shell_parser.set_defaults(cmd='shell')
 
     for arg in docker_args:
@@ -85,7 +116,7 @@ def main(*args):
 
     jupyter_mode = shell_mode = run_mode = False
     cmd = getattr(args, 'cmd', None)
-    if cmd =='jupyter':
+    if cmd == 'jupyter':
         jupyter_mode = True
     elif cmd == 'shell':
         shell_mode = True
@@ -111,9 +142,9 @@ def main(*args):
     clone = args.__dict__.get('clone')
     if input:
         if (
-            force_remote or
-            (m := match(GIT_SSH_URL_REGEX, input)) or
-            (m := match(GIT_HTTP_URL_REGEX, input))
+                force_remote or
+                (m := match(GIT_SSH_URL_REGEX, input)) or
+                (m := match(GIT_HTTP_URL_REGEX, input))
         ) and not force_local:
             url_branch = m['branch'] if m else None
             if branch is None and url_branch:
@@ -148,7 +179,8 @@ def main(*args):
             elif 'image' in keys:
                 pips = pips.pop('image')
             if keys:
-                raise ValueError(f'Unexpected keys in `pip` config dict (expected: "container" || ("img" ^ "image")): {keys}')
+                raise ValueError(
+                    f'Unexpected keys in `pip` config dict (expected: "container" || ("img" ^ "image")): {keys}')
 
         gsmo_root = env.get('GSMO_ROOT')
         dst = get('dst', env.get('GSMO_DST'))
@@ -178,8 +210,8 @@ def main(*args):
         git_dir = join(src, '.git')
         ctx = get('ctx', env.get('GSMO_CTX'))
         if isfile(git_dir):
-            with open(git_dir,'r') as f:
-                [ ln ] = [ l for line in f.readlines() if (l := line.strip()) ]
+            with open(git_dir, 'r') as f:
+                [ln] = [l for line in f.readlines() if (l := line.strip())]
             rgx = r'^gitdir: (?P<path>.*)$'
             if not (m := match(rgx, ln)):
                 raise Exception(f'Unrecognized .git file contents: {ln}')
@@ -191,7 +223,7 @@ def main(*args):
                 workdir = [basename(src)] + workdir
                 src = dirname(src)
                 i += 1
-            if i + 2 >= len(pcs) or pcs[i] != '.git' or pcs[i+1] != 'modules':
+            if i + 2 >= len(pcs) or pcs[i] != '.git' or pcs[i + 1] != 'modules':
                 raise Exception(f'Expected gitdir path of the form `(../)*.git/modules`; found {path}')
             print(f'workdir: {workdir}')
             workdir = join(dst, *workdir)
@@ -251,7 +283,7 @@ def main(*args):
             missing_paths = RAISE
 
         groups = lists(get('group'))
-        groups = [ g for group in groups if (g := clean_group(group, err=missing_paths)) ]
+        groups = [g for group in groups if (g := clean_group(group, err=missing_paths))]
 
         out = get('out') or 'nbs'
 
@@ -273,7 +305,7 @@ def main(*args):
                         host_src = dst2src[dir]
                         if relpath:
                             host_src = join(host_src, relpath)
-                        host_mnt = Mount(host_src,dst,keep_missing=True)
+                        host_mnt = Mount(host_src, dst, keep_missing=True)
                         print(f'Re-mapping mount {mnt} to host src: {host_mnt}')
                         return host_mnt
                     parent = dirname(dir)
@@ -286,11 +318,11 @@ def main(*args):
                     dir = parent
             return mnt
 
-        mounts = Mounts([ dind_mnt(m.src, m.dst) for m in mounts.mounts ])
+        mounts = Mounts([dind_mnt(m.src, m.dst) for m in mounts.mounts])
         mounts += dind_mnt(src, dst)
 
-        container_pip_mounts = [ Mount(pip) for pip in container_pips ]
-        mounts += [ dind_mnt(m.src, m.dst) for m in container_pip_mounts ]
+        container_pip_mounts = [Mount(pip) for pip in container_pips]
+        mounts += [dind_mnt(m.src, m.dst) for m in container_pip_mounts]
 
         dind = get('dind')
         if dind:
@@ -341,14 +373,20 @@ def main(*args):
         id = UnixId()
 
         image_user = get('image_user', DEFAULT_USER)
-        if image_user is True: image_user = DEFAULT_USER
-        elif image_user is False: image_user = None
-        elif image_user == '': image_user = id.user
+        if image_user is True:
+            image_user = DEFAULT_USER
+        elif image_user is False:
+            image_user = None
+        elif image_user == '':
+            image_user = id.user
 
         image_group = get('image_group', DEFAULT_GROUP)
-        if image_group is True: image_group = DEFAULT_GROUP
-        elif image_group is False: image_group = None
-        elif image_group == '': image_group = id.group
+        if image_group is True:
+            image_group = DEFAULT_GROUP
+        elif image_group is False:
+            image_group = None
+        elif image_group == '':
+            image_group = id.group
 
         sudo = get('sudo')
         id_attrs = lists(get('id'))
@@ -393,7 +431,7 @@ def main(*args):
             ]
 
             if jupyter_mode:
-                [ src_port, dst_port ] = ports[0].split(':')
+                [src_port, dst_port] = ports[0].split(':')
 
                 src_pcs = src_port.split('-')
                 if len(src_pcs) <= 2:
@@ -409,14 +447,14 @@ def main(*args):
         else:
             if jupyter_mode:
                 # Hash the module name to determine a port for Jupyter in the range [2**10,2**16)
-                start = 2**10
-                end = 2**16
+                start = 2 ** 10
+                end = 2 ** 16
                 from hashlib import sha256
                 m = sha256()
                 m.update(name.encode())
                 digest = int(m.hexdigest(), 16)
-                jupyter_src_port = jupyter_dst_port = digest % (end-start) + start
-                ports = [ f'{jupyter_src_port}:{jupyter_dst_port}', ]
+                jupyter_src_port = jupyter_dst_port = digest % (end - start) + start
+                ports = [f'{jupyter_src_port}:{jupyter_dst_port}', ]
             else:
                 ports = []
 
@@ -425,7 +463,7 @@ def main(*args):
             if not sudo:
                 print('Enforcing `sudo` bit required for sh_entrypoint.sh / docker-for-linux bug workaround')
                 sudo = True
-            entrypoint = join(gsmo_dir,'sh_entrypoint.sh')
+            entrypoint = join(gsmo_dir, 'sh_entrypoint.sh')
             cmd_args = []
         elif jupyter_mode:
             # Launch `jupyter notebook` server
@@ -433,49 +471,50 @@ def main(*args):
             assert jupyter_dst_port
             cmd_args = [
                 'notebook',
-                '--ip','0.0.0.0',
-                '--port',jupyter_dst_port,
+                '--ip', '0.0.0.0',
+                '--port', jupyter_dst_port,
                 '--ContentsManager.allow_hidden=True',
                 f'--NotebookApp.notebook_dir={jupyter_dir}',
             ]
             if root:
-                cmd_args += [ '--allow-root', ]
+                cmd_args += ['--allow-root', ]
         else:
             assert run_mode
             run_nb = get('run', DEFAULT_RUN_NB)
             entrypoint = 'gsmo-entrypoint'
             if not exists(run_nb):
                 raise ValueError(f"Run notebook doesn't exist: {run_nb}")
-            cmd_args = [ '--run', run_nb, '--out', out, ]
+            cmd_args = ['--run', run_nb, '--out', out, ]
             if commit:
-                cmd_args += [ ['--commit',path] for path in commit]
+                cmd_args += [['--commit', path] for path in commit]
             push_refs = get('push', [])
             if push_refs:
                 for ref in push_refs:
                     cmd_args += ['--push', ref]
 
         if dind:
-            [gid,grp] = line(
-                'docker','run',
-                '-v','/var/run/docker.sock:/var/run/docker.sock',
-                '--rm','--entrypoint','stat',
+            [gid, grp] = line(
+                'docker', 'run',
+                '-v', '/var/run/docker.sock:/var/run/docker.sock',
+                '--rm', '--entrypoint', 'stat',
                 base_image,
-                '-c','%g %G','/var/run/docker.sock',
+                '-c', '%g %G', '/var/run/docker.sock',
             ).split(' ')
-            docker_sock = o(gid=gid,grp=grp)
+            docker_sock = o(gid=gid, grp=grp)
             print(f'Parsed /var/run/docker.sock group: {grp} ({gid})')
 
         # Remove any existing container
         run_in_existing_container = False
         rm_existing_container = False
         if use_docker:
-            container = process.json('docker','container','inspect',name, err_ok=True)
+            container = process.json('docker', 'container', 'inspect', name, err_ok=True)
             if container:
                 container = singleton(container, dedupe=False)
-                if container.get('State',{}).get('Running',False):
-                    container_labels = container.get('Config').get('Labels',{})
-                    if not container_labels.get('gsmo.image',{}):
-                        raise RuntimeError(f"Running container {name} doesn't appear to be a gsmo container (missing gsmo.image label)")
+                if container.get('State', {}).get('Running', False):
+                    container_labels = container.get('Config').get('Labels', {})
+                    if not container_labels.get('gsmo.image', {}):
+                        raise RuntimeError(
+                            f"Running container {name} doesn't appear to be a gsmo container (missing gsmo.image label)")
                     print(f'Will execute in existing container {name}')
                     run_in_existing_container = True
                 else:
@@ -541,7 +580,7 @@ def main(*args):
                         print('pip install "%s"' % "\" \"".join(pips))
                         pip.main(['install'] + pips)
 
-                ENV('GSMO=1', { f'GSMO_{k.upper()}':v for k,v in default_kvs.items()})
+                ENV('GSMO=1', {f'GSMO_{k.upper()}': v for k, v in default_kvs.items()})
 
                 if image_envs:
                     build_image = True
@@ -549,10 +588,10 @@ def main(*args):
 
                 if image_env_file:
                     build_image = True
-                    with open(image_env_file,'r') as f:
-                        ENV(*[ l.strip() for l in f.readlines() ])
+                    with open(image_env_file, 'r') as f:
+                        ENV(*[l.strip() for l in f.readlines()])
 
-                LABEL('gsmo', { f'gsmo.{k}':v for k,v in default_kvs.items()})
+                LABEL('gsmo', {f'gsmo.{k}': v for k, v in default_kvs.items()})
 
                 if labels:
                     build_image = True
@@ -560,8 +599,8 @@ def main(*args):
 
                 if labels_file:
                     build_image = True
-                    with open(labels_file,'r') as f:
-                        LABEL(*[ l.strip() for l in f.readlines() ])
+                    with open(labels_file, 'r') as f:
+                        LABEL(*[l.strip() for l in f.readlines()])
 
                 if use_docker:
                     if image_user or image_group or sudo or dind:
@@ -577,11 +616,12 @@ def main(*args):
                                 useradd = f'useradd -u {id.uid} -g {id.gid} -G {docker_sock.gid} -s /bin/bash -m -d {IMAGE_HOME} {image_user}'
                             else:
                                 useradd = f'useradd -u {id.uid} -g {id.gid} -s /bin/bash -m -d {IMAGE_HOME} {image_user}'
-                            cmds += [useradd,]
+                            cmds += [useradd, ]
 
                         if sudo or dind:
                             # user isn't known at build-time though, so pswd-less sudo is patched in here
-                            cmds += [ 'perl -pi -e "s/^%%sudo(.*ALL=).*/%s\\1(ALL) NOPASSWD: ALL/" /etc/sudoers' % image_user, ]
+                            cmds += [
+                                'perl -pi -e "s/^%%sudo(.*ALL=).*/%s\\1(ALL) NOPASSWD: ALL/" /etc/sudoers' % image_user, ]
 
                         cmds += [
                             f'chown -R {id.uid}:{id.gid} {IMAGE_HOME}'
@@ -606,25 +646,25 @@ def main(*args):
                         image = name
                         if tags:
                             for tag in tags:
-                                run('docker','tag',name,f'{name}:{tag}')
+                                run('docker', 'tag', name, f'{name}:{tag}')
 
         # Determine user to run as (inside Docker container)
         user_args = []
         if not root:
-            uid = line('id','-u')
+            uid = line('id', '-u')
             if uid == '0':
                 root = True
             else:
-                gid = line('id','-g')
-                user_args = [ '-u', f'{uid}:{gid}' ]
+                gid = line('id', '-g')
+                user_args = ['-u', f'{uid}:{gid}']
 
         # Remove any existing container
         if rm_existing_container:
-            run('docker','container','rm',name)
+            run('docker', 'container', 'rm', name)
 
         interactive = not args.no_interactive
         if interactive:
-            flags = [ '-it' ]
+            flags = ['-it']
         else:
             flags = []
         if rm:
@@ -633,12 +673,12 @@ def main(*args):
                 flags += ['--rm']
 
         if container_pips:
-            cmd_args = [ len(container_pips) ] + container_pips + [ entrypoint ] + cmd_args
-            entrypoint = join(gsmo_dir,'pip_entrypoint.sh')
+            cmd_args = [len(container_pips)] + container_pips + [entrypoint] + cmd_args
+            entrypoint = join(gsmo_dir, 'pip_entrypoint.sh')
 
         if dind:
             cmd_args = [entrypoint] + cmd_args
-            entrypoint = join(gsmo_dir,'dind_entrypoint.sh')
+            entrypoint = join(gsmo_dir, 'dind_entrypoint.sh')
             groups.append(docker_sock.gid)
 
         run_config_file = None
@@ -662,11 +702,11 @@ def main(*args):
                 mkdir(run_config_dir)
                 run_config_path = join(run_config_dir, RUN_CONFIG_YML_NAME)
                 print(f'Writing run config to {run_config_path} (gsmo dir: {gsmo_dir})')
-                with open(run_config_path,'w') as f:
+                with open(run_config_path, 'w') as f:
                     yaml.safe_dump(dict(run_config), f, sort_keys=False)
                 mnt = dind_mnt(run_config_path, run_config_dst)
                 mounts += mnt
-                cmd_args += [ '-Y', run_config_dst ]
+                cmd_args += ['-Y', run_config_dst]
             else:
                 print('no run config')
         else:
@@ -675,42 +715,42 @@ def main(*args):
         try:
             def get_git_id(k, fmt):
                 try:
-                    v = line('git','config',f'user.{k}')
+                    v = line('git', 'config', f'user.{k}')
                 except CalledProcessError:
-                    v = line('git','log','-n','1',f'--format={fmt}')
+                    v = line('git', 'log', '-n', '1', f'--format={fmt}')
                     stderr.write(f'Falling back to Git user {k} from most recent commit: {v}\n')
                 return v
 
             # Get Git user name/email for propagating into image
             git_id = o(
-                name  = get_git_id( 'name', '%an'),
-                email = get_git_id('email', '%ae'),
+                name=get_git_id('name', '%an'),
+                email=get_git_id('email', '%ae'),
             )
 
             # Set up author info for git committing
             container_envs = {
                 **container_envs,
-               'GIT_AUTHOR_NAME'    : git_id.name,
-               'GIT_AUTHOR_EMAIL'   : git_id.email,
-               'GIT_COMMITTER_NAME' : git_id.name,
-               'GIT_COMMITTER_EMAIL': git_id.email,
+                'GIT_AUTHOR_NAME': git_id.name,
+                'GIT_AUTHOR_EMAIL': git_id.email,
+                'GIT_COMMITTER_NAME': git_id.name,
+                'GIT_COMMITTER_EMAIL': git_id.email,
             }
 
             # Build Docker CLI args
-            env_args = [ [ '-e', f'{k}={v}' ] for k, v in container_envs.items() ]
-            if container_env_file: env_args += [ '--env-file', container_env_file ]
-            port_args = [ [ '-p', port ] for port in ports ]
-            group_args = [ [ '--group-add', group ] for group in groups ]
-            entrypoint_args = [ '--entrypoint', entrypoint ]
-            workdir_args = [ '--workdir', workdir ]
-            name_args = [ '--name', name ]
+            env_args = [['-e', f'{k}={v}'] for k, v in container_envs.items()]
+            if container_env_file: env_args += ['--env-file', container_env_file]
+            port_args = [['-p', port] for port in ports]
+            group_args = [['--group-add', group] for group in groups]
+            entrypoint_args = ['--entrypoint', entrypoint]
+            workdir_args = ['--workdir', workdir]
+            name_args = ['--name', name]
 
-            label_args = ['-l','gsmo'] + [ ['-l',f'gsmo.{k}={v}'] for k,v in default_kvs.items() ]
+            label_args = ['-l', 'gsmo'] + [['-l', f'gsmo.{k}={v}'] for k, v in default_kvs.items()]
             if labels:
-                label_args += [ [ '-l', f'{k}={v}' ] for k,v in labels.items() ]
+                label_args += [['-l', f'{k}={v}'] for k, v in labels.items()]
 
             if labels_file:
-                label_args += [ '--label-file', labels_file ]
+                label_args += ['--label-file', labels_file]
 
             exec_flags = \
                 flags + \
@@ -747,13 +787,13 @@ def main(*args):
                     # 3. re-attach container
                     if run_in_existing_container:
                         cmd = [
-                            'docker','exec',
+                            'docker', 'exec',
                             '-d',
                             all_args,
                         ]
                     else:
                         cmd = [
-                            'docker','run',
+                            'docker', 'run',
                             '-d',
                             all_args,
                         ]
@@ -761,8 +801,8 @@ def main(*args):
                         run(*cmd, dry_run=True)
                     else:
                         def get_jupyter_link():
-                            lns = lines('docker','exec',name,'jupyter','notebook','list')
-                            [ first, *rest ] = lns
+                            lns = lines('docker', 'exec', name, 'jupyter', 'notebook', 'list')
+                            [first, *rest] = lns
                             if first != 'Currently running servers:':
                                 raise Exception('Unexpected `jupyter notebook list` output:\n\t%s' % "\n\t".join(lns))
                             ln = singleton(rest, empty_ok=True)
@@ -771,7 +811,8 @@ def main(*args):
                                 if not (m := match(rgx, ln)):
                                     raise RuntimeError(f'Unrecognized notebook server line: {ln}')
                                 if m['port'] != str(jupyter_dst_port):
-                                    raise RuntimeError(f'Jupyter running on unexpected port {m["port"]} (!= {jupyter_dst_port})')
+                                    raise RuntimeError(
+                                        f'Jupyter running on unexpected port {m["port"]} (!= {jupyter_dst_port})')
                                 token = m['token']
                                 url = f'http://127.0.0.1:{jupyter_src_port}?token={token}'
                                 return url
@@ -783,33 +824,34 @@ def main(*args):
                         url = backoff(get_jupyter_link, init=.5, step=1.6, max=5)
                         if jupyter_open:
                             try:
-                                run('open',url)
+                                run('open', url)
                             except CalledProcessError:
                                 stderr.write('Failed to open %s\n' % url)
                         if shell:
-                            run('docker','exec','-it',name,'/usr/bin/env','bash')
+                            run('docker', 'exec', '-it', name, '/usr/bin/env', 'bash')
                         else:
                             if not detach:
-                                run('docker','attach',name)
+                                run('docker', 'attach', name)
                 else:
                     print(f'running from {cwd}')
                     if run_in_existing_container:
                         run(
-                            'docker','exec',
+                            'docker', 'exec',
                             all_args,
                             dry_run=dry_run,
                         )
                     else:
                         run(
-                            'docker','run',
+                            'docker', 'run',
                             all_args,
                             dry_run=dry_run,
                         )
             else:
                 if jupyter_src_port != jupyter_dst_port:
-                    raise ValueError(f'Mismatching jupyter ports in non-docker mode: {jupyter_src_port} != {jupyter_dst_port}')
+                    raise ValueError(
+                        f'Mismatching jupyter ports in non-docker mode: {jupyter_src_port} != {jupyter_dst_port}')
                 jupyter_port = jupyter_src_port
-                cmd = ['jupyter','notebook','--port',jupyter_port]
+                cmd = ['jupyter', 'notebook', '--port', jupyter_port]
                 if not jupyter_open:
                     cmd += ['--no-browser']
                 run(*cmd, dry_run=dry_run)
@@ -818,6 +860,7 @@ def main(*args):
             if run_config_file:
                 remove(run_config_file.name)
                 print(f'Cleaned up run config {run_config_path} ({exists(run_config_file.name)})')
+
 
 if __name__ == '__main__':
     main()
