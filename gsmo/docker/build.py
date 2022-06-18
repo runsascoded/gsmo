@@ -76,11 +76,11 @@ def build(
                 wheel=None,
             ),
             dict(
-                jupyter='1.0.0',
-                nbdime='2.1.0',
-                pandas='1.1.3',
-                papermill='2.2.0',
-                pyyaml='5.4.0',
+                jupyter=None,
+                nbdime=None,
+                pandas=None,
+                papermill=None,
+                pyyaml=None,
             )
         ]
         NOTE('Basic pip dependencies: Jupyter, pandas')

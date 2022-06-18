@@ -8,7 +8,7 @@ RUN apt-get update \
  && apt-get install -y apt-transport-https ca-certificates gnupg2 software-properties-common sudo \
  && curl -fsSL https://download.docker.com/linux/debian/gpg | apt-key add - \
  && add-apt-repository "deb [arch=amd64] https://download.docker.com/linux/debian buster stable" \
- && apt-get update \
- && apt-get install -y docker-ce docker-ce-cli containerd.io \
- && apt-get clean all \
+ && apt-get update
+RUN apt-get install -y docker-ce docker-ce-cli containerd.io
+RUN apt-get clean all \
  && rm -rf /var/lib/apt/lists
